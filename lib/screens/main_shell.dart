@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../core/theme.dart';
 import 'dashboard_page.dart';
 import 'asset_page.dart';
@@ -18,13 +19,17 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
 
-  static const _pages = <Widget>[
-    DashboardPage(),
-    AssetPage(),
-    TransactionPage(),
-    DataTablePage(),
-    AnalyticsPage(),
-    ProfilePage(),
+  void _goToTab(int index) {
+    setState(() => _selectedIndex = index);
+  }
+
+  List<Widget> get _pages => [
+    DashboardPage(onNavigateToTab: _goToTab),
+    const AssetPage(),
+    const TransactionPage(),
+    const DataTablePage(),
+    const AnalyticsPage(),
+    const ProfilePage(),
   ];
 
   static const _navItems = <BottomNavigationBarItem>[
@@ -63,24 +68,20 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
-          border: Border(
-            top: BorderSide(color: AppColors.divider, width: 0.5),
-          ),
+          border: Border(top: BorderSide(color: AppColors.divider, width: 0.5)),
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           onTap: (i) => setState(() => _selectedIndex = i),
           items: _navItems,
-          selectedLabelStyle:
-              GoogleFonts.lato(fontSize: 10, fontWeight: FontWeight.w700),
-          unselectedLabelStyle:
-              GoogleFonts.lato(fontSize: 10),
+          selectedLabelStyle: GoogleFonts.lato(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          ),
+          unselectedLabelStyle: GoogleFonts.lato(fontSize: 10),
         ),
       ),
     );

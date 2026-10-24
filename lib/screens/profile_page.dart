@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../core/theme.dart';
+import '../core/app_state.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -12,21 +16,38 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
-
-  final _namaCtrl = TextEditingController(text: 'Rizki Nugraha');
-  final _emailCtrl = TextEditingController(text: 'rizki.nugraha@email.com');
-  final _waCtrl = TextEditingController(text: '+62 812-3456-7890');
-  final _alamatCtrl = TextEditingController(
-    text: 'Jl. Sudirman No. 45, Jakarta Pusat',
-  );
-  final _kotaCtrl = TextEditingController(text: 'Jakarta');
-  final _pekerjaanCtrl = TextEditingController(text: 'Software Engineer');
-  final _pendapatanCtrl = TextEditingController(text: '8.500.000');
+  late TextEditingController _namaCtrl;
+  late TextEditingController _emailCtrl;
+  late TextEditingController _waCtrl;
+  late TextEditingController _alamatCtrl;
+  late TextEditingController _kotaCtrl;
+  late TextEditingController _pekerjaanCtrl;
+  late TextEditingController _pendapatanCtrl;
 
   bool _isSaving = false;
 
   @override
+  void initState() {
+    super.initState();
+    final s = AppState.instance;
+    _namaCtrl = TextEditingController(text: s.name);
+    _emailCtrl = TextEditingController(text: s.email);
+    _waCtrl = TextEditingController(text: s.phone);
+    _alamatCtrl = TextEditingController(text: s.address);
+    _kotaCtrl = TextEditingController(text: s.city);
+    _pekerjaanCtrl = TextEditingController(text: s.job);
+    _pendapatanCtrl = TextEditingController(
+      text: s.monthlyIncome.toInt().toString().replaceAllMapped(
+        RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+        (m) => '${m[1]}.',
+      ),
+    );
+    AppState.instance.addListener(_onStateChanged);
+  }
+
+  @override
   void dispose() {
+    AppState.instance.removeListener(_onStateChanged);
     _namaCtrl.dispose();
     _emailCtrl.dispose();
     _waCtrl.dispose();
@@ -37,10 +58,139 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
+  void _onStateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _pickPhoto() async {
+    final picker = ImagePicker();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Ganti Foto Profil',
+                style: GoogleFonts.lato(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.teal.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt_outlined,
+                    color: AppColors.teal,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Kamera',
+                  style: GoogleFonts.lato(color: AppColors.textPrimary),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final img = await picker.pickImage(
+                    source: ImageSource.camera,
+                    imageQuality: 80,
+                  );
+                  if (img != null) AppState.instance.updatePhoto(img.path);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.chart2.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.photo_library_outlined,
+                    color: AppColors.chart2,
+                    size: 20,
+                  ),
+                ),
+                title: Text(
+                  'Galeri',
+                  style: GoogleFonts.lato(color: AppColors.textPrimary),
+                ),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final img = await picker.pickImage(
+                    source: ImageSource.gallery,
+                    imageQuality: 80,
+                  );
+                  if (img != null) AppState.instance.updatePhoto(img.path);
+                },
+              ),
+              if (AppState.instance.photoPath != null)
+                ListTile(
+                  leading: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.expense.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      color: AppColors.expense,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Hapus Foto',
+                    style: GoogleFonts.lato(color: AppColors.expense),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    AppState.instance.updatePhoto('');
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
-    await Future.delayed(const Duration(seconds: 1));
+    await Future.delayed(const Duration(milliseconds: 600));
+
+    final incomeText = _pendapatanCtrl.text
+        .replaceAll('.', '')
+        .replaceAll(',', '');
+    final income =
+        double.tryParse(incomeText) ?? AppState.instance.monthlyIncome;
+
+    AppState.instance.updateProfile(
+      newName: _namaCtrl.text.trim(),
+      newEmail: _emailCtrl.text.trim(),
+      newPhone: _waCtrl.text.trim(),
+      newAddress: _alamatCtrl.text.trim(),
+      newCity: _kotaCtrl.text.trim(),
+      newJob: _pekerjaanCtrl.text.trim(),
+      newIncome: income,
+    );
+
     setState(() => _isSaving = false);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -58,6 +208,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final state = AppState.instance;
+
     return Scaffold(
       backgroundColor: AppColors.bgDark,
       appBar: AppBar(title: const Text('Data Diri')),
@@ -68,27 +220,39 @@ class _ProfilePageState extends State<ProfilePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Avatar ─────────────────────────────────────────────────
+              // ── Avatar ──────────────────────────────────────────────────
               Center(
                 child: Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 48,
-                      backgroundColor: AppColors.teal.withValues(alpha: 0.15),
-                      child: const Icon(
-                        Icons.person,
-                        color: AppColors.teal,
-                        size: 52,
+                    GestureDetector(
+                      onTap: _pickPhoto,
+                      child: CircleAvatar(
+                        radius: 52,
+                        backgroundColor: AppColors.teal.withValues(alpha: 0.15),
+                        backgroundImage:
+                            (state.photoPath != null &&
+                                state.photoPath!.isNotEmpty)
+                            ? FileImage(File(state.photoPath!))
+                            : null,
+                        child:
+                            (state.photoPath == null ||
+                                state.photoPath!.isEmpty)
+                            ? const Icon(
+                                Icons.person,
+                                color: AppColors.teal,
+                                size: 52,
+                              )
+                            : null,
                       ),
                     ),
                     Positioned(
                       bottom: 0,
                       right: 0,
                       child: GestureDetector(
-                        onTap: () {},
+                        onTap: _pickPhoto,
                         child: Container(
-                          width: 30,
-                          height: 30,
+                          width: 32,
+                          height: 32,
                           decoration: BoxDecoration(
                             color: AppColors.teal,
                             shape: BoxShape.circle,
@@ -100,7 +264,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           child: const Icon(
                             Icons.camera_alt,
                             color: AppColors.bgDark,
-                            size: 14,
+                            size: 16,
                           ),
                         ),
                       ),
@@ -113,7 +277,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
               Center(
                 child: Text(
-                  'Foto Profil',
+                  'Ketuk foto untuk mengubah',
                   style: GoogleFonts.lato(
                     color: AppColors.textMuted,
                     fontSize: 12,
@@ -123,7 +287,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
               const SizedBox(height: 28),
 
-              // ── Section: Informasi Pribadi ─────────────────────────────
+              // ── Informasi Pribadi ────────────────────────────────────────
               _SectionLabel(label: 'Informasi Pribadi'),
               const SizedBox(height: 12),
 
@@ -149,7 +313,7 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 14),
               _FormField(
                 controller: _waCtrl,
-                label: 'Nomor WhatsApp (WA)',
+                label: 'Nomor WhatsApp',
                 icon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
                 hint: '+62 8xx-xxxx-xxxx',
@@ -172,7 +336,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
               const SizedBox(height: 28),
 
-              // ── Section: Informasi Pekerjaan ───────────────────────────
+              // ── Informasi Pekerjaan ──────────────────────────────────────
               _SectionLabel(label: 'Informasi Pekerjaan'),
               const SizedBox(height: 12),
 
@@ -187,12 +351,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 label: 'Pendapatan Bulanan (Rp)',
                 icon: Icons.attach_money,
                 keyboardType: TextInputType.number,
-                hint: 'Contoh: 8.500.000',
+                hint: 'Contoh: 3.500.000',
               ),
 
               const SizedBox(height: 28),
 
-              // ── Section: Preferensi ────────────────────────────────────
+              // ── Preferensi ───────────────────────────────────────────────
               _SectionLabel(label: 'Preferensi'),
               const SizedBox(height: 12),
 
@@ -211,22 +375,15 @@ class _ProfilePageState extends State<ProfilePage> {
                     _SwitchRow(
                       icon: Icons.notifications_outlined,
                       label: 'Notifikasi Transaksi',
-                      value: true,
-                      onChanged: (_) {},
+                      value: state.notifEnabled,
+                      onChanged: (v) => AppState.instance.setNotif(v),
                     ),
                     const Divider(color: AppColors.divider, height: 1),
                     _SwitchRow(
                       icon: Icons.dark_mode_outlined,
                       label: 'Mode Gelap',
-                      value: true,
-                      onChanged: (_) {},
-                    ),
-                    const Divider(color: AppColors.divider, height: 1),
-                    _SwitchRow(
-                      icon: Icons.fingerprint,
-                      label: 'Autentikasi Biometrik',
-                      value: false,
-                      onChanged: (_) {},
+                      value: state.darkMode,
+                      onChanged: (v) => AppState.instance.setDarkMode(v),
                     ),
                   ],
                 ),
@@ -234,7 +391,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
               const SizedBox(height: 32),
 
-              // ── Save button ────────────────────────────────────────────
+              // ── Simpan ────────────────────────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -271,11 +428,14 @@ class _ProfilePageState extends State<ProfilePage> {
 
               const SizedBox(height: 12),
 
-              // ── Secondary action ───────────────────────────────────────
+              // ── Keluar ────────────────────────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {},
+                  onPressed: () {
+                    AppState.instance.reset();
+                    Navigator.of(context).pushReplacementNamed('/login');
+                  },
                   icon: const Icon(
                     Icons.logout,
                     size: 16,
@@ -306,6 +466,8 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 }
+
+// ── Helpers ───────────────────────────────────────────────────────────────
 
 class _SectionLabel extends StatelessWidget {
   final String label;

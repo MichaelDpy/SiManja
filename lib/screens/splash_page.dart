@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -76,15 +77,13 @@ class _SplashPageState extends State<SplashPage>
       parent: _controller,
       curve: const Interval(0.275, 0.55, curve: Curves.easeIn),
     );
-    _nameSlide = Tween<Offset>(
-      begin: const Offset(0, 0.4),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.275, 0.55, curve: Curves.easeOut),
-      ),
-    );
+    _nameSlide = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0.275, 0.55, curve: Curves.easeOut),
+          ),
+        );
 
     // ── Loading indicator ─────────────────────────────────────────────────
     // Starts at 900 ms, completes at 1 300 ms (relative: 0.45 → 0.65)
@@ -112,7 +111,7 @@ class _SplashPageState extends State<SplashPage>
         statusBarIconBrightness: Brightness.light,
       ),
     );
-    Navigator.of(context).pushReplacementNamed('/intro');
+    Navigator.of(context).pushReplacementNamed('/login');
   }
 
   @override
@@ -137,10 +136,7 @@ class _SplashPageState extends State<SplashPage>
               // ── Animated Logo ──────────────────────────────────────────
               FadeTransition(
                 opacity: _logoOpacity,
-                child: ScaleTransition(
-                  scale: _logoScale,
-                  child: _LogoWidget(),
-                ),
+                child: ScaleTransition(scale: _logoScale, child: _LogoWidget()),
               ),
 
               const SizedBox(height: 28),
@@ -190,8 +186,8 @@ class _SplashPageState extends State<SplashPage>
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Color(0xFF52D6A4),
                         ),
-                        backgroundColor:
-                            const Color(0xFF52D6A4).withValues(alpha: 0.15),
+                        backgroundColor: const Color(0xFF52D6A4)
+                            .withValues(alpha: 0.15),
                       ),
                     ),
                     const SizedBox(height: 14),

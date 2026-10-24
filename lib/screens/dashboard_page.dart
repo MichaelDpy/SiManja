@@ -1,14 +1,20 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+
 import '../core/theme.dart';
 import '../core/mock_data.dart';
+import '../core/app_state.dart';
 import '../widgets/section_header.dart';
 import '../widgets/account_card.dart';
 
 class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+  final void Function(int tabIndex)? onNavigateToTab;
+
+  const DashboardPage({super.key, this.onNavigateToTab});
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -16,10 +22,112 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   int _touchedIndex = -1;
-  final _fmt = NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+  final _fmt = NumberFormat.currency(
+    locale: 'id_ID',
+    symbol: 'Rp ',
+    decimalDigits: 0,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    AppState.instance.addListener(_onStateChanged);
+  }
+
+  @override
+  void dispose() {
+    AppState.instance.removeListener(_onStateChanged);
+    super.dispose();
+  }
+
+  void _onStateChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _showNotifications() {
+    final state = AppState.instance;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'Notifikasi',
+                  style: GoogleFonts.lato(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                Icon(
+                  state.notifEnabled
+                      ? Icons.notifications_active_outlined
+                      : Icons.notifications_off_outlined,
+                  color: state.notifEnabled
+                      ? AppColors.teal
+                      : AppColors.textMuted,
+                  size: 20,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (!state.notifEnabled)
+              Center(
+                child: Text(
+                  'Notifikasi dinonaktifkan.\nAktifkan di halaman Profil.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.lato(
+                    color: AppColors.textMuted,
+                    fontSize: 13,
+                  ),
+                ),
+              )
+            else ...[
+              _NotifItem(
+                icon: Icons.savings_outlined,
+                color: AppColors.income,
+                title: 'Tabungan bertambah',
+                subtitle: 'Saldo rekening utama diperbarui',
+                time: 'Baru saja',
+              ),
+              const SizedBox(height: 10),
+              _NotifItem(
+                icon: Icons.warning_amber_outlined,
+                color: AppColors.chart6,
+                title: 'Pengeluaran tinggi',
+                subtitle: 'Pengeluaran bulan ini melebihi rata-rata',
+                time: '1 jam lalu',
+              ),
+              const SizedBox(height: 10),
+              _NotifItem(
+                icon: Icons.trending_up,
+                color: AppColors.chart2,
+                title: 'Investasi naik 2.3%',
+                subtitle: 'Portofolio reksa dana kamu meningkat',
+                time: '3 jam lalu',
+              ),
+            ],
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final state = AppState.instance;
+
     return Scaffold(
       backgroundColor: AppColors.bgDark,
       body: SafeArea(
@@ -42,7 +150,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                         Text(
-                          'Dasbor Keuangan',
+                          state.name,
                           style: GoogleFonts.lato(
                             color: AppColors.textPrimary,
                             fontSize: 22,
@@ -52,16 +160,49 @@ class _DashboardPageState extends State<DashboardPage> {
                       ],
                     ),
                     const Spacer(),
-                    IconButton(
-                      onPressed: () {},
-                      icon: const Icon(Icons.notifications_outlined,
-                          color: AppColors.textSecondary),
+                    // Lonceng notifikasi
+                    Stack(
+                      children: [
+                        IconButton(
+                          onPressed: _showNotifications,
+                          icon: const Icon(
+                            Icons.notifications_outlined,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        if (state.notifEnabled)
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: AppColors.expense,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(width: 4),
-                    CircleAvatar(
-                      radius: 18,
-                      backgroundColor: AppColors.teal.withValues(alpha: 0.2),
-                      child: const Icon(Icons.person, color: AppColors.teal, size: 18),
+                    // Avatar profil
+                    GestureDetector(
+                      onTap: () => widget.onNavigateToTab?.call(5),
+                      child: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppColors.teal.withValues(alpha: 0.2),
+                        backgroundImage: state.photoPath != null
+                            ? FileImage(File(state.photoPath!))
+                            : null,
+                        child: state.photoPath == null
+                            ? const Icon(
+                                Icons.person,
+                                color: AppColors.teal,
+                                size: 18,
+                              )
+                            : null,
+                      ),
                     ),
                   ],
                 ),
@@ -85,7 +226,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                        color: AppColors.teal.withValues(alpha: 0.3)),
+                      color: AppColors.teal.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,14 +253,14 @@ class _DashboardPageState extends State<DashboardPage> {
                         children: [
                           _BalanceStat(
                             label: 'Pemasukan',
-                            value: _fmt.format(MockData.totalIncome),
+                            value: _fmt.format(state.totalIncome),
                             color: AppColors.income,
                             icon: Icons.arrow_downward,
                           ),
                           const SizedBox(width: 24),
                           _BalanceStat(
                             label: 'Pengeluaran',
-                            value: _fmt.format(MockData.totalExpense),
+                            value: _fmt.format(state.totalExpense),
                             color: AppColors.expense,
                             icon: Icons.arrow_upward,
                           ),
@@ -174,7 +316,8 @@ class _DashboardPageState extends State<DashboardPage> {
                                   pieTouchData: PieTouchData(
                                     touchCallback: (event, response) {
                                       setState(() {
-                                        if (!event.isInterestedForInteractions ||
+                                        if (!event
+                                                .isInterestedForInteractions ||
                                             response == null ||
                                             response.touchedSection == null) {
                                           _touchedIndex = -1;
@@ -186,12 +329,10 @@ class _DashboardPageState extends State<DashboardPage> {
                                       });
                                     },
                                   ),
-                                  sections: MockData.assets
-                                      .asMap()
-                                      .entries
-                                      .map((e) {
-                                    final isTouched =
-                                        e.key == _touchedIndex;
+                                  sections: MockData.assets.asMap().entries.map((
+                                    e,
+                                  ) {
+                                    final isTouched = e.key == _touchedIndex;
                                     return PieChartSectionData(
                                       value: e.value.percentage,
                                       color: e.value.color,
@@ -215,10 +356,8 @@ class _DashboardPageState extends State<DashboardPage> {
                             Expanded(
                               flex: 5,
                               child: Column(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.center,
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: MockData.assets
                                     .map((a) => _LegendItem(asset: a))
                                     .toList(),
@@ -240,7 +379,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: SectionHeader(
                   title: 'Rekening & Akun',
                   actionLabel: 'Lihat Semua',
-                  onAction: () {},
+                  onAction: () => widget.onNavigateToTab?.call(2),
                 ),
               ),
             ),
@@ -261,22 +400,22 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: SectionHeader(
                   title: 'Transaksi Terbaru',
                   actionLabel: 'Lihat Semua',
-                  onAction: () {},
+                  onAction: () => widget.onNavigateToTab?.call(2),
                 ),
               ),
             ),
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (ctx, i) {
-                  final tx = MockData.transactions[i];
+                  final tx = state.transactions[i];
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                     child: _TransactionTile(tx: tx, fmt: _fmt),
                   );
                 },
-                childCount: MockData.transactions.length > 5
+                childCount: state.transactions.length > 5
                     ? 5
-                    : MockData.transactions.length,
+                    : state.transactions.length,
               ),
             ),
 
@@ -284,6 +423,66 @@ class _DashboardPageState extends State<DashboardPage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NotifItem extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final String time;
+
+  const _NotifItem({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.time,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.lato(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: GoogleFonts.lato(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          time,
+          style: GoogleFonts.lato(color: AppColors.textMuted, fontSize: 10),
+        ),
+      ],
     );
   }
 }
@@ -320,10 +519,7 @@ class _BalanceStat extends StatelessWidget {
           children: [
             Text(
               label,
-              style: GoogleFonts.lato(
-                color: AppColors.textMuted,
-                fontSize: 11,
-              ),
+              style: GoogleFonts.lato(color: AppColors.textMuted, fontSize: 11),
             ),
             Text(
               value,
