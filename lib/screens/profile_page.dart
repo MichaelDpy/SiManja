@@ -66,7 +66,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final picker = ImagePicker();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.bgCard,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -211,7 +211,6 @@ class _ProfilePageState extends State<ProfilePage> {
     final state = AppState.instance;
 
     return Scaffold(
-      backgroundColor: AppColors.bgDark,
       appBar: AppBar(title: const Text('Data Diri')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -366,9 +365,13 @@ class _ProfilePageState extends State<ProfilePage> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.bgCard,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.divider),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.divider
+                        : const Color(0xFFE0E4EF),
+                  ),
                 ),
                 child: Column(
                   children: [
@@ -432,9 +435,49 @@ class _ProfilePageState extends State<ProfilePage> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: () {
-                    AppState.instance.reset();
-                    Navigator.of(context).pushReplacementNamed('/login');
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        backgroundColor: Theme.of(context).colorScheme.surface,
+                        title: Text(
+                          'Keluar dari Akun?',
+                          style: GoogleFonts.lato(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                          ),
+                        ),
+                        content: Text(
+                          'Semua perubahan yang belum disimpan akan hilang.',
+                          style: GoogleFonts.lato(fontSize: 13),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: Text(
+                              'Batal',
+                              style: GoogleFonts.lato(
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: Text(
+                              'Keluar',
+                              style: GoogleFonts.lato(
+                                color: AppColors.expense,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true && mounted) {
+                      AppState.instance.reset();
+                      Navigator.of(context).pushReplacementNamed('/login');
+                    }
                   },
                   icon: const Icon(
                     Icons.logout,
@@ -488,11 +531,7 @@ class _SectionLabel extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           label,
-          style: GoogleFonts.lato(
-            color: AppColors.textPrimary,
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-          ),
+          style: GoogleFonts.lato(fontSize: 15, fontWeight: FontWeight.w700),
         ),
       ],
     );
@@ -525,7 +564,7 @@ class _FormField extends StatelessWidget {
       keyboardType: keyboardType,
       maxLines: maxLines,
       validator: validator,
-      style: GoogleFonts.lato(color: AppColors.textPrimary, fontSize: 14),
+      style: GoogleFonts.lato(fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
