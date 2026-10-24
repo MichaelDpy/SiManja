@@ -48,7 +48,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final state = AppState.instance;
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.bgCard,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -129,7 +129,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final state = AppState.instance;
 
     return Scaffold(
-      backgroundColor: AppColors.bgDark,
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
@@ -279,7 +278,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: AppColors.bgCard,
+                    color: Theme.of(context).colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Column(
@@ -594,7 +593,7 @@ class _TransactionTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 2),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.bgCard,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(

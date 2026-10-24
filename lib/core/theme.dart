@@ -130,4 +130,100 @@ class AppTheme {
       ),
     );
   }
+
+  static ThemeData get light {
+    return ThemeData(
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: const Color(0xFFF5F6FA),
+      colorScheme: const ColorScheme.light(
+        primary: AppColors.teal,
+        secondary: AppColors.tealDark,
+        surface: Colors.white,
+        onPrimary: Colors.white,
+        onSecondary: Colors.white,
+        onSurface: Color(0xFF1A1F2E),
+      ),
+      textTheme: GoogleFonts.latoTextTheme(
+        const TextTheme(
+          displayLarge: TextStyle(color: Color(0xFF1A1F2E)),
+          displayMedium: TextStyle(color: Color(0xFF1A1F2E)),
+          displaySmall: TextStyle(color: Color(0xFF1A1F2E)),
+          headlineLarge: TextStyle(color: Color(0xFF1A1F2E)),
+          headlineMedium: TextStyle(color: Color(0xFF1A1F2E)),
+          headlineSmall: TextStyle(color: Color(0xFF1A1F2E)),
+          titleLarge: TextStyle(color: Color(0xFF1A1F2E)),
+          titleMedium: TextStyle(color: Color(0xFF1A1F2E)),
+          titleSmall: TextStyle(color: Color(0xFF555E7A)),
+          bodyLarge: TextStyle(color: Color(0xFF1A1F2E)),
+          bodyMedium: TextStyle(color: Color(0xFF555E7A)),
+          bodySmall: TextStyle(color: Color(0xFF8B92A9)),
+          labelLarge: TextStyle(color: Color(0xFF1A1F2E)),
+          labelMedium: TextStyle(color: Color(0xFF555E7A)),
+          labelSmall: TextStyle(color: Color(0xFF8B92A9)),
+        ),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
+        titleTextStyle: GoogleFonts.lato(
+          color: const Color(0xFF1A1F2E),
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+        iconTheme: const IconThemeData(color: Color(0xFF1A1F2E)),
+      ),
+      cardTheme: const CardThemeData(
+        color: Colors.white,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+      ),
+      dividerColor: const Color(0xFFE0E4EF),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE0E4EF)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE0E4EF)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.teal, width: 1.5),
+        ),
+        labelStyle: const TextStyle(color: Color(0xFF555E7A)),
+        hintStyle: const TextStyle(color: Color(0xFF8B92A9)),
+        prefixIconColor: const Color(0xFF8B92A9),
+        suffixIconColor: const Color(0xFF8B92A9),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.teal,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          textStyle: GoogleFonts.lato(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+        backgroundColor: Colors.white,
+        selectedItemColor: AppColors.teal,
+        unselectedItemColor: Color(0xFF8B92A9),
+        type: BottomNavigationBarType.fixed,
+        elevation: 0,
+      ),
+    );
+  }
 }

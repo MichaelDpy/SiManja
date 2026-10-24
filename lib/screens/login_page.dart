@@ -57,7 +57,6 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bgDark,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -111,7 +110,6 @@ class _LoginPageState extends State<LoginPage> {
                 Text(
                   'Masuk ke Akun',
                   style: GoogleFonts.lato(
-                    color: AppColors.textPrimary,
                     fontSize: 24,
                     fontWeight: FontWeight.w800,
                   ),
@@ -119,11 +117,7 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 6),
                 Text(
                   'Masukkan email dan password untuk melanjutkan.',
-                  style: GoogleFonts.lato(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    height: 1.5,
-                  ),
+                  style: GoogleFonts.lato(fontSize: 13, height: 1.5),
                 ),
 
                 const SizedBox(height: 28),

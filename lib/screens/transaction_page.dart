@@ -144,29 +144,23 @@ class _TransactionPageState extends State<TransactionPage>
   List<TransactionModel> get _expenseTx =>
       AppState.instance.transactions.where((t) => !t.isIncome).toList();
 
-  void _openAddDialog() {
-    _showTxDialog(context, existing: null, existingIndex: null);
-  }
-
-  void _openEditDialog(TransactionModel tx, int index) {
-    _showTxDialog(context, existing: tx, existingIndex: index);
-  }
+  void _openAddDialog() => _showTxDialog(existing: null, existingIndex: null);
+  void _openEditDialog(TransactionModel tx, int index) =>
+      _showTxDialog(existing: tx, existingIndex: index);
 
   void _confirmDelete(TransactionModel tx) {
+    final cs = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        backgroundColor: AppColors.bgCard,
+        backgroundColor: cs.surface,
         title: Text(
           'Hapus Transaksi?',
-          style: GoogleFonts.lato(
-            color: AppColors.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
+          style: GoogleFonts.lato(fontWeight: FontWeight.w700),
         ),
         content: Text(
           'Transaksi "${tx.description}" akan dihapus permanen.',
-          style: GoogleFonts.lato(color: AppColors.textSecondary, fontSize: 13),
+          style: GoogleFonts.lato(fontSize: 13),
         ),
         actions: [
           TextButton(
@@ -184,7 +178,7 @@ class _TransactionPageState extends State<TransactionPage>
                 SnackBar(
                   content: Text(
                     'Transaksi dihapus',
-                    style: GoogleFonts.lato(color: AppColors.bgDark),
+                    style: GoogleFonts.lato(color: Colors.white),
                   ),
                   backgroundColor: AppColors.expense,
                   behavior: SnackBarBehavior.floating,
@@ -207,15 +201,15 @@ class _TransactionPageState extends State<TransactionPage>
     );
   }
 
-  void _showTxDialog(
-    BuildContext ctx, {
+  void _showTxDialog({
     required TransactionModel? existing,
     required int? existingIndex,
   }) {
+    final cs = Theme.of(context).colorScheme;
     showModalBottomSheet(
-      context: ctx,
+      context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.bgCard,
+      backgroundColor: cs.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -231,8 +225,10 @@ class _TransactionPageState extends State<TransactionPage>
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = AppState.instance.darkMode;
+
     return Scaffold(
-      backgroundColor: AppColors.bgDark,
       appBar: AppBar(
         title: const Text('Transaksi & Akun'),
         actions: [
@@ -260,7 +256,6 @@ class _TransactionPageState extends State<TransactionPage>
       ),
       body: Column(
         children: [
-          // ── Account Cards ──────────────────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: SectionHeader(
@@ -275,22 +270,18 @@ class _TransactionPageState extends State<TransactionPage>
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               scrollDirection: Axis.horizontal,
               itemCount: MockData.accounts.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              separatorBuilder: (_, _x) => const SizedBox(width: 10),
               itemBuilder: (ctx, i) =>
                   _AccountMiniCard(account: MockData.accounts[i], fmt: _fmt),
             ),
           ),
-
           const SizedBox(height: 4),
-
-          const Divider(
-            color: AppColors.divider,
+          Divider(
+            color: isDark ? AppColors.divider : const Color(0xFFE0E4EF),
             height: 24,
             indent: 16,
             endIndent: 16,
           ),
-
-          // ── Transactions ───────────────────────────────────────────────
           Expanded(
             child: TabBarView(
               controller: _tab,
@@ -324,7 +315,7 @@ class _TransactionPageState extends State<TransactionPage>
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openAddDialog,
         backgroundColor: AppColors.teal,
-        foregroundColor: AppColors.bgDark,
+        foregroundColor: cs.onPrimary,
         icon: const Icon(Icons.add),
         label: Text(
           'Tambah Transaksi',
@@ -335,7 +326,7 @@ class _TransactionPageState extends State<TransactionPage>
   }
 }
 
-// ── Form Sheet Tambah/Edit ────────────────────────────────────────────────
+// ── Form Sheet ────────────────────────────────────────────────────────────
 class _TransactionFormSheet extends StatefulWidget {
   final TransactionModel? existing;
   final int? existingIndex;
@@ -367,7 +358,6 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       text: ex != null ? ex.amount.toStringAsFixed(0) : '',
     );
     _selectedDate = ex?.date ?? DateTime.now();
-
     if (ex != null) {
       _selectedCategory = _kCategories.firstWhere(
         (c) => c.name == ex.category,
@@ -384,6 +374,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
   }
 
   Future<void> _pickDate() async {
+    final isDark = AppState.instance.darkMode;
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
@@ -391,10 +382,15 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       lastDate: DateTime(2030),
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.dark(
-            primary: AppColors.teal,
-            surface: AppColors.bgCard,
-          ),
+          colorScheme: isDark
+              ? const ColorScheme.dark(
+                  primary: AppColors.teal,
+                  surface: AppColors.bgCard,
+                )
+              : const ColorScheme.light(
+                  primary: AppColors.teal,
+                  surface: Colors.white,
+                ),
         ),
         child: child!,
       ),
@@ -409,7 +405,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         SnackBar(
           content: Text(
             'Pilih kategori terlebih dahulu',
-            style: GoogleFonts.lato(color: AppColors.bgDark),
+            style: GoogleFonts.lato(color: Colors.white),
           ),
           backgroundColor: AppColors.expense,
           behavior: SnackBarBehavior.floating,
@@ -450,7 +446,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
           widget.existing != null
               ? 'Transaksi diperbarui'
               : 'Transaksi ditambahkan',
-          style: GoogleFonts.lato(color: AppColors.bgDark),
+          style: GoogleFonts.lato(color: Colors.white),
         ),
         backgroundColor: AppColors.teal,
         behavior: SnackBarBehavior.floating,
@@ -461,7 +457,10 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = AppState.instance.darkMode;
     final isEdit = widget.existing != null;
+
     return Padding(
       padding: EdgeInsets.only(
         left: 20,
@@ -483,7 +482,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: AppColors.divider,
+                    color: isDark ? AppColors.divider : const Color(0xFFE0E4EF),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -491,7 +490,6 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
               Text(
                 isEdit ? 'Edit Transaksi' : 'Tambah Transaksi',
                 style: GoogleFonts.lato(
-                  color: AppColors.textPrimary,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
                 ),
@@ -502,24 +500,23 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
               Text(
                 'Kategori',
                 style: GoogleFonts.lato(
-                  color: AppColors.textSecondary,
                   fontSize: 12,
+                  color: Theme.of(context).textTheme.bodyMedium?.color,
                 ),
               ),
               const SizedBox(height: 8),
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.bgDark,
+                  color: cs.surface,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.divider),
+                  border: Border.all(
+                    color: isDark ? AppColors.divider : const Color(0xFFE0E4EF),
+                  ),
                 ),
                 child: DropdownButtonFormField<_CategoryOption>(
                   value: _selectedCategory,
-                  dropdownColor: AppColors.bgCard,
-                  style: GoogleFonts.lato(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                  ),
+                  dropdownColor: cs.surface,
+                  style: GoogleFonts.lato(color: cs.onSurface, fontSize: 13),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(
@@ -546,7 +543,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                             style: GoogleFonts.lato(
                               color: c.isIncome
                                   ? AppColors.income
-                                  : AppColors.textPrimary,
+                                  : cs.onSurface,
                               fontSize: 13,
                             ),
                           ),
@@ -560,13 +557,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
               const SizedBox(height: 14),
 
-              // Deskripsi
               TextFormField(
                 controller: _descCtrl,
-                style: GoogleFonts.lato(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
-                ),
+                style: GoogleFonts.lato(color: cs.onSurface, fontSize: 14),
                 decoration: const InputDecoration(
                   labelText: 'Keterangan',
                   prefixIcon: Icon(Icons.notes),
@@ -578,14 +571,10 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
               const SizedBox(height: 14),
 
-              // Jumlah
               TextFormField(
                 controller: _amountCtrl,
                 keyboardType: TextInputType.number,
-                style: GoogleFonts.lato(
-                  color: AppColors.textPrimary,
-                  fontSize: 14,
-                ),
+                style: GoogleFonts.lato(color: cs.onSurface, fontSize: 14),
                 decoration: const InputDecoration(
                   labelText: 'Jumlah (Rp)',
                   prefixIcon: Icon(Icons.attach_money),
@@ -593,10 +582,12 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Jumlah wajib diisi';
                   final cleaned = v.replaceAll(',', '').replaceAll('.', '');
-                  if (double.tryParse(cleaned) == null)
+                  if (double.tryParse(cleaned) == null) {
                     return 'Format tidak valid';
-                  if (double.parse(cleaned) <= 0)
+                  }
+                  if (double.parse(cleaned) <= 0) {
                     return 'Jumlah harus lebih dari 0';
+                  }
                   return null;
                 },
               ),
@@ -613,13 +604,17 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                     vertical: 14,
                   ),
                   decoration: BoxDecoration(
-                    color: AppColors.bgCard,
+                    color: cs.surface,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.divider),
+                    border: Border.all(
+                      color: isDark
+                          ? AppColors.divider
+                          : const Color(0xFFE0E4EF),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.calendar_today_outlined,
                         color: AppColors.textSecondary,
                         size: 18,
@@ -631,7 +626,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                           'id_ID',
                         ).format(_selectedDate),
                         style: GoogleFonts.lato(
-                          color: AppColors.textPrimary,
+                          color: cs.onSurface,
                           fontSize: 14,
                         ),
                       ),
@@ -653,8 +648,6 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                 child: ElevatedButton(
                   onPressed: _save,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.teal,
-                    foregroundColor: AppColors.bgDark,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -686,6 +679,7 @@ class _AccountMiniCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Container(
       width: 160,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -706,7 +700,7 @@ class _AccountMiniCard extends StatelessWidget {
                 child: Text(
                   account.name,
                   style: GoogleFonts.lato(
-                    color: AppColors.textSecondary,
+                    color: cs.onSurface.withValues(alpha: 0.7),
                     fontSize: 11,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -718,7 +712,7 @@ class _AccountMiniCard extends StatelessWidget {
           Text(
             fmt.format(account.balance),
             style: GoogleFonts.lato(
-              color: AppColors.textPrimary,
+              color: cs.onSurface,
               fontSize: 13,
               fontWeight: FontWeight.w700,
             ),
@@ -748,6 +742,8 @@ class _TxList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     if (transactions.isEmpty) {
       return Center(
         child: Column(
@@ -771,10 +767,9 @@ class _TxList extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
       itemCount: transactions.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _x) => const SizedBox(height: 8),
       itemBuilder: (ctx, i) {
         final tx = transactions[i];
-        // index di full list
         final fullIndex = AppState.instance.transactions.indexWhere(
           (t) => t.id == tx.id,
         );
@@ -799,14 +794,14 @@ class _TxList extends StatelessWidget {
           ),
           confirmDismiss: (_) async {
             onDelete(tx);
-            return false; // hapus lewat state, bukan dismiss otomatis
+            return false;
           },
           child: GestureDetector(
             onLongPress: () => onEdit(tx, fullIndex),
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: AppColors.bgCard,
+                color: cs.surface,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Row(
@@ -828,7 +823,7 @@ class _TxList extends StatelessWidget {
                         Text(
                           tx.description,
                           style: GoogleFonts.lato(
-                            color: AppColors.textPrimary,
+                            color: cs.onSurface,
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
                           ),
@@ -878,7 +873,6 @@ class _TxList extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      // Tombol edit
                       GestureDetector(
                         onTap: () => onEdit(tx, fullIndex),
                         child: const Icon(
