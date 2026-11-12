@@ -1,17 +1,62 @@
-# simanja
+# SIMANJA — Sistem Informasi Manajemen Keuangan
 
-A new Flutter project.
+Aplikasi manajemen keuangan pribadi berbasis Flutter dengan backend Firebase.
 
-## Getting Started
+## Struktur Repositori
 
-This project is a starting point for a Flutter application.
+```
+simanja/              ← root Git
+├── lib/              ← source Dart (paket Flutter utama berada di root)
+│   ├── core/         ← state, tema, model, utilitas keuangan
+│   ├── screens/      ← halaman aplikasi
+│   └── widgets/      ← widget bersama
+├── assets/           ← aset statis (gambar, ikon)
+├── android/          ← konfigurasi native Android
+├── ios/              ← konfigurasi native iOS
+├── test/             ← pengujian unit & widget
+├── pubspec.yaml      ← dependensi Flutter
+├── pubspec.lock      ← lockfile (di-commit, jangan diabaikan)
+└── backend/          ← (belum ada) Firebase tools, rules, Cloud Functions
+```
 
-A few resources to get you started if this is your first Flutter project:
+> **Catatan:** Kode Flutter berada langsung di root repositori ini (bukan di subdirektori `frontend/`). Folder `backend/` akan ditambahkan pada tahap integrasi Firebase.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+## Memulai Pengembangan
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+# Pasang dependensi
+flutter pub get
+
+# Jalankan di emulator/perangkat
+flutter run
+
+# Analisis kode
+flutter analyze
+
+# Jalankan tes
+flutter test
+```
+
+## Dependensi Utama
+
+| Paket | Kegunaan |
+|---|---|
+| `fl_chart` | Grafik keuangan |
+| `google_fonts` | Tipografi Lato |
+| `intl` | Format tanggal & angka (lokal `id_ID`) |
+| `flutter_svg` | Logo dan ikon SVG |
+| `flutter_native_splash` | Splash screen native |
+| `image_picker` | Foto profil lokal |
+
+## Rencana Backend (Firebase)
+
+Backend Firebase akan berada di folder `backend/` dan mencakup:
+- Firebase Authentication (email/password)
+- Cloud Firestore (transaksi & profil per pengguna)
+- Security Rules dengan pengujian Emulator Suite
+
+Lihat `00-panduan-tim.md` untuk pembagian tugas dan urutan integrasi lengkap.
+
+## Kontribusi
+
+Ikuti aturan commit di `00-panduan-tim.md`. Jalankan `flutter analyze` sebelum membuat commit.
