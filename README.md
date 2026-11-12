@@ -6,24 +6,29 @@ Aplikasi manajemen keuangan pribadi berbasis Flutter dengan backend Firebase.
 
 ```
 simanja/              ← root Git
-├── lib/              ← source Dart (paket Flutter utama berada di root)
-│   ├── core/         ← state, tema, model, utilitas keuangan
-│   ├── screens/      ← halaman aplikasi
-│   └── widgets/      ← widget bersama
-├── assets/           ← aset statis (gambar, ikon)
-├── android/          ← konfigurasi native Android
-├── ios/              ← konfigurasi native iOS
-├── test/             ← pengujian unit & widget
-├── pubspec.yaml      ← dependensi Flutter
-├── pubspec.lock      ← lockfile (di-commit, jangan diabaikan)
-└── backend/          ← (belum ada) Firebase tools, rules, Cloud Functions
+├── frontend/         ← paket Flutter (jalankan flutter di sini)
+│   ├── lib/
+│   │   ├── core/     ← state, tema, model, utilitas keuangan
+│   │   ├── screens/  ← halaman aplikasi
+│   │   └── widgets/  ← widget bersama
+│   ├── assets/       ← aset statis (gambar, ikon)
+│   ├── android/      ← konfigurasi native Android
+│   ├── ios/          ← konfigurasi native iOS
+│   ├── test/         ← pengujian unit & widget
+│   ├── pubspec.yaml  ← dependensi Flutter
+│   └── pubspec.lock  ← lockfile (di-commit, jangan diabaikan)
+├── backend/          ← (belum ada) Firebase tools, rules, Cloud Functions
+├── .gitignore
+└── 00-panduan-tim.md ← panduan tim & pembagian tugas
 ```
-
-> **Catatan:** Kode Flutter berada langsung di root repositori ini (bukan di subdirektori `frontend/`). Folder `backend/` akan ditambahkan pada tahap integrasi Firebase.
 
 ## Memulai Pengembangan
 
+Semua perintah Flutter dijalankan dari dalam folder `frontend/`:
+
 ```bash
+cd frontend
+
 # Pasang dependensi
 flutter pub get
 
@@ -59,4 +64,4 @@ Lihat `00-panduan-tim.md` untuk pembagian tugas dan urutan integrasi lengkap.
 
 ## Kontribusi
 
-Ikuti aturan commit di `00-panduan-tim.md`. Jalankan `flutter analyze` sebelum membuat commit.
+Ikuti aturan commit di `00-panduan-tim.md`. Jalankan `flutter analyze` dari `frontend/` sebelum membuat commit.
