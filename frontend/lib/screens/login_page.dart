@@ -77,7 +77,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         child: const Icon(
                           Icons.account_balance_wallet_rounded,
-                          color: AppColors.bgDark,
+                          color: Colors.white,
                           size: 36,
                         ),
                       ),
@@ -95,7 +95,7 @@ class _LoginPageState extends State<LoginPage> {
                       Text(
                         'Sistem Manajemen Keuangan',
                         style: GoogleFonts.lato(
-                          color: AppColors.textMuted,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                           fontSize: 12,
                           letterSpacing: 0.5,
                         ),
@@ -133,7 +133,7 @@ class _LoginPageState extends State<LoginPage> {
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
                         style: GoogleFonts.lato(
-                          color: AppColors.textPrimary,
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 14,
                         ),
                         decoration: const InputDecoration(
@@ -161,7 +161,7 @@ class _LoginPageState extends State<LoginPage> {
                         textInputAction: TextInputAction.done,
                         onFieldSubmitted: (_) => _login(),
                         style: GoogleFonts.lato(
-                          color: AppColors.textPrimary,
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontSize: 14,
                         ),
                         decoration: InputDecoration(
@@ -242,9 +242,9 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: _isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.teal,
-                      foregroundColor: AppColors.bgDark,
+                      foregroundColor: Colors.white,
                       disabledBackgroundColor: AppColors.teal.withValues(
-                        alpha: 0.4,
+                        alpha: 0.38,
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -257,7 +257,7 @@ class _LoginPageState extends State<LoginPage> {
                             height: 22,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              color: AppColors.bgDark,
+                              color: Colors.white,
                             ),
                           )
                         : Text(

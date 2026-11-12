@@ -52,7 +52,7 @@ class _DashboardPageState extends State<DashboardPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => Padding(
+      builder: (sheetCtx) => Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -62,11 +62,8 @@ class _DashboardPageState extends State<DashboardPage> {
               children: [
                 Text(
                   'Notifikasi',
-                  style: GoogleFonts.lato(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: Theme.of(sheetCtx).textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
                 Icon(
@@ -75,7 +72,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       : Icons.notifications_off_outlined,
                   color: state.notifEnabled
                       ? AppColors.teal
-                      : AppColors.textMuted,
+                      : Theme.of(sheetCtx).colorScheme.onSurfaceVariant,
                   size: 20,
                 ),
               ],
@@ -86,10 +83,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: Text(
                   'Notifikasi dinonaktifkan.\nAktifkan di halaman Profil.',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.lato(
-                    color: AppColors.textMuted,
-                    fontSize: 13,
-                  ),
+                  style: Theme.of(sheetCtx).textTheme.bodyMedium,
                 ),
               )
             else ...[
@@ -143,18 +137,14 @@ class _DashboardPageState extends State<DashboardPage> {
                       children: [
                         Text(
                           'Selamat Datang 👋',
-                          style: GoogleFonts.lato(
-                            color: AppColors.textSecondary,
-                            fontSize: 13,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         Text(
                           state.name,
-                          style: GoogleFonts.lato(
-                            color: AppColors.textPrimary,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                          ),
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w800),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -164,9 +154,11 @@ class _DashboardPageState extends State<DashboardPage> {
                       children: [
                         IconButton(
                           onPressed: _showNotifications,
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.notifications_outlined,
-                            color: AppColors.textSecondary,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                         if (state.notifEnabled)
@@ -233,19 +225,13 @@ class _DashboardPageState extends State<DashboardPage> {
                     children: [
                       Text(
                         'Total Aset',
-                        style: GoogleFonts.lato(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
+                        style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 6),
                       Text(
                         _fmt.format(MockData.totalAssets),
-                        style: GoogleFonts.lato(
-                          color: AppColors.textPrimary,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 16),
                       Row(
@@ -287,19 +273,13 @@ class _DashboardPageState extends State<DashboardPage> {
                         children: [
                           Text(
                             'Distribusi Aset',
-                            style: GoogleFonts.lato(
-                              color: AppColors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                           const Spacer(),
                           Text(
                             'Sep 2026',
-                            style: GoogleFonts.lato(
-                              color: AppColors.textMuted,
-                              fontSize: 12,
-                            ),
+                            style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
                       ),
@@ -443,6 +423,7 @@ class _NotifItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
     return Row(
       children: [
         Container(
@@ -461,26 +442,13 @@ class _NotifItem extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: GoogleFonts.lato(
-                  color: AppColors.textPrimary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
               ),
-              Text(
-                subtitle,
-                style: GoogleFonts.lato(
-                  color: AppColors.textMuted,
-                  fontSize: 11,
-                ),
-              ),
+              Text(subtitle, style: tt.bodySmall),
             ],
           ),
         ),
-        Text(
-          time,
-          style: GoogleFonts.lato(color: AppColors.textMuted, fontSize: 10),
-        ),
+        Text(time, style: tt.bodySmall),
       ],
     );
   }
@@ -501,6 +469,7 @@ class _BalanceStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
     return Row(
       children: [
         Container(
@@ -516,17 +485,10 @@ class _BalanceStat extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              label,
-              style: GoogleFonts.lato(color: AppColors.textMuted, fontSize: 11),
-            ),
+            Text(label, style: tt.bodySmall),
             Text(
               value,
-              style: GoogleFonts.lato(
-                color: AppColors.textPrimary,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
+              style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
           ],
         ),
@@ -541,6 +503,7 @@ class _LegendItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -557,20 +520,13 @@ class _LegendItem extends StatelessWidget {
           Expanded(
             child: Text(
               asset.name,
-              style: GoogleFonts.lato(
-                color: AppColors.textSecondary,
-                fontSize: 11,
-              ),
+              style: tt.bodySmall,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           Text(
             '${asset.percentage.toStringAsFixed(1)}%',
-            style: GoogleFonts.lato(
-              color: AppColors.textPrimary,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
+            style: tt.bodySmall?.copyWith(fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -586,8 +542,9 @@ class _TransactionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tt = Theme.of(context).textTheme;
     final sign = tx.isIncome ? '+' : '-';
-    final color = tx.isIncome ? AppColors.income : AppColors.expense;
+    final amountColor = tx.isIncome ? AppColors.income : AppColors.expense;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
@@ -614,27 +571,24 @@ class _TransactionTile extends StatelessWidget {
               children: [
                 Text(
                   tx.description,
-                  style: GoogleFonts.lato(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   tx.category,
-                  style: GoogleFonts.lato(
-                    color: AppColors.textMuted,
-                    fontSize: 11,
-                  ),
+                  style: tt.bodySmall,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 8),
           Text(
             '$sign${fmt.format(tx.amount)}',
-            style: GoogleFonts.lato(
-              color: color,
-              fontSize: 13,
+            style: tt.bodyMedium?.copyWith(
+              color: amountColor,
               fontWeight: FontWeight.w700,
             ),
           ),

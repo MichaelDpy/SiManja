@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../core/theme.dart';
 import 'dashboard_page.dart';
 import 'asset_page.dart';
 import 'data_table_page.dart';
@@ -70,8 +69,10 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.divider, width: 0.5)),
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: Theme.of(context).dividerColor, width: 0.5),
+          ),
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
