@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
-import 'theme.dart';
 
-// ── Models ─────────────────────────────────────────────────────────────────
+import 'theme.dart';
+import '../models/transaction_model.dart';
+
+// Re-export agar import lama (import '../core/mock_data.dart') tetap valid.
+export '../models/transaction_model.dart' show TransactionModel, CategoryMeta;
+
+// ── Model-model lokal yang belum dipindah ─────────────────────────────────
 
 class AccountModel {
   final String name;
@@ -14,28 +19,6 @@ class AccountModel {
     required this.name,
     required this.subtitle,
     required this.balance,
-    required this.icon,
-    required this.color,
-  });
-}
-
-class TransactionModel {
-  final String id;
-  final String category;
-  final String description;
-  final double amount;
-  final bool isIncome;
-  final DateTime date;
-  final IconData icon;
-  final Color color;
-
-  const TransactionModel({
-    required this.id,
-    required this.category,
-    required this.description,
-    required this.amount,
-    required this.isIncome,
-    required this.date,
     required this.icon,
     required this.color,
   });
@@ -83,9 +66,55 @@ class TableRowModel {
   });
 }
 
-// ── Mock Data ───────────────────────────────────────────────────────────────
+// ── Model pengguna demo ───────────────────────────────────────────────────
+
+/// Data profil pengguna demo untuk tahap frontend lokal.
+///
+/// ⚠ KHUSUS DEMO — C2/C3 wajib menghapus ketergantungan autentikasi
+/// pada objek ini setelah Firebase Auth aktif. Email dan password di sini
+/// hanya untuk smoke-test login lokal, bukan kredensial produksi.
+class DemoUser {
+  final String name;
+  final String email;
+
+  /// Password demo — HANYA untuk validasi login lokal tahap frontend.
+  /// Firebase Auth akan menggantikan ini; hapus field ini saat C2 aktif.
+  final String password;
+  final String phone;
+  final String address;
+  final String city;
+  final String job;
+  final double monthlyIncome;
+
+  const DemoUser({
+    required this.name,
+    required this.email,
+    required this.password,
+    required this.phone,
+    required this.address,
+    required this.city,
+    required this.job,
+    required this.monthlyIncome,
+  });
+}
+
+// ── Mock Data ─────────────────────────────────────────────────────────────
 
 class MockData {
+  MockData._();
+
+  /// Profil pengguna demo. Lihat peringatan [DemoUser].
+  static const DemoUser dummyUser = DemoUser(
+    name: 'Budi Santoso',
+    email: 'budi@demo.simanja',
+    password: 'demo1234', // ← hapus saat Firebase Auth aktif (C2)
+    phone: '+62 812-3456-7890',
+    address: 'Jl. Merdeka No. 10',
+    city: 'Jakarta',
+    job: 'Software Engineer',
+    monthlyIncome: 10_000_000,
+  );
+
   static const List<AccountModel> accounts = [
     AccountModel(
       name: 'Rekening Utama',
@@ -124,108 +153,188 @@ class MockData {
     ),
   ];
 
-  static final List<TransactionModel> transactions = [
-    TransactionModel(
-      id: 'TRX001',
-      category: 'Gaji',
-      description: 'Gaji Bulan September',
-      amount: 8_500_000,
-      isIncome: true,
-      date: DateTime(2026, 9, 1),
-      icon: Icons.work,
-      color: AppColors.income,
-    ),
-    TransactionModel(
-      id: 'TRX002',
-      category: 'Makan & Minum',
-      description: 'Belanja Bulanan',
-      amount: 1_200_000,
-      isIncome: false,
-      date: DateTime(2026, 9, 3),
-      icon: Icons.restaurant,
-      color: AppColors.chart3,
-    ),
-    TransactionModel(
-      id: 'TRX003',
-      category: 'Transportasi',
-      description: 'Bensin & Parkir',
-      amount: 450_000,
-      isIncome: false,
-      date: DateTime(2026, 9, 5),
-      icon: Icons.directions_car,
-      color: AppColors.chart2,
-    ),
-    TransactionModel(
-      id: 'TRX004',
-      category: 'Tagihan',
-      description: 'Listrik & Internet',
-      amount: 780_000,
-      isIncome: false,
-      date: DateTime(2026, 9, 7),
-      icon: Icons.bolt,
-      color: AppColors.chart6,
-    ),
-    TransactionModel(
-      id: 'TRX005',
-      category: 'Kesehatan',
-      description: 'Apotek & Vitamin',
-      amount: 320_000,
-      isIncome: false,
-      date: DateTime(2026, 9, 9),
-      icon: Icons.local_hospital,
-      color: AppColors.chart4,
-    ),
-    TransactionModel(
-      id: 'TRX006',
-      category: 'Investasi',
-      description: 'Top-up Reksa Dana',
-      amount: 2_000_000,
-      isIncome: false,
-      date: DateTime(2026, 9, 10),
-      icon: Icons.trending_up,
-      color: AppColors.teal,
-    ),
-    TransactionModel(
-      id: 'TRX007',
-      category: 'Hiburan',
-      description: 'Streaming & Game',
-      amount: 250_000,
-      isIncome: false,
-      date: DateTime(2026, 9, 12),
-      icon: Icons.movie,
-      color: AppColors.chart4,
-    ),
-    TransactionModel(
-      id: 'TRX008',
-      category: 'Transfer Masuk',
-      description: 'Bayar Hutang Teman',
-      amount: 500_000,
-      isIncome: true,
-      date: DateTime(2026, 9, 13),
-      icon: Icons.swap_horiz,
-      color: AppColors.income,
-    ),
-    TransactionModel(
-      id: 'TRX009',
-      category: 'Pendidikan',
-      description: 'Kursus Online',
-      amount: 650_000,
-      isIncome: false,
-      date: DateTime(2026, 9, 14),
-      icon: Icons.school,
-      color: AppColors.chart5,
-    ),
-    TransactionModel(
-      id: 'TRX010',
-      category: 'Belanja',
-      description: 'Pakaian & Aksesori',
-      amount: 890_000,
-      isIncome: false,
-      date: DateTime(2026, 9, 14),
-      icon: Icons.shopping_bag,
-      color: AppColors.chart3,
-    ),
-  ];
+  /// Tanggal acuan fixture demo.
+  ///
+  /// Semua data contoh dibuat relatif terhadap tanggal ini sehingga
+  /// bisa direproduksi pada tes tanpa bergantung pada waktu nyata.
+  /// Gunakan [demoAnchor] di tes, jangan pakai DateTime.now().
+  static final DateTime demoAnchor = DateTime(2026, 11, 1);
+
+  /// Transaksi contoh bertanggal relatif terhadap [demoAnchor].
+  ///
+  /// Mencakup 6 bulan (Jun–Nov 2026) dengan bulan tanpa transaksi
+  /// sengaja dibiarkan kosong untuk menguji seri bulanan nol.
+  static List<TransactionModel> get transactions {
+    final a = demoAnchor; // Nov 2026
+    return [
+      // ── Nov 2026 ─────────────────────────────────────────────────
+      TransactionModel(
+        id: 'TRX001',
+        category: 'Gaji',
+        description: 'Gaji Bulan November',
+        amount: 8_500_000,
+        isIncome: true,
+        date: DateTime(a.year, a.month, 1),
+      ),
+      TransactionModel(
+        id: 'TRX002',
+        category: 'Makan & Minum',
+        description: 'Belanja Bulanan',
+        amount: 1_200_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month, 3),
+      ),
+      TransactionModel(
+        id: 'TRX003',
+        category: 'Transportasi',
+        description: 'Bensin & Parkir',
+        amount: 450_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month, 5),
+      ),
+      TransactionModel(
+        id: 'TRX004',
+        category: 'Tagihan',
+        description: 'Listrik & Internet',
+        amount: 780_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month, 7),
+      ),
+      TransactionModel(
+        id: 'TRX005',
+        category: 'Kesehatan',
+        description: 'Apotek & Vitamin',
+        amount: 320_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month, 9),
+      ),
+      TransactionModel(
+        id: 'TRX006',
+        category: 'Investasi',
+        description: 'Top-up Reksa Dana',
+        amount: 2_000_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month, 10),
+      ),
+      TransactionModel(
+        id: 'TRX007',
+        category: 'Hiburan',
+        description: 'Streaming & Game',
+        amount: 250_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month, 12),
+      ),
+      TransactionModel(
+        id: 'TRX008',
+        category: 'Transfer Masuk',
+        description: 'Bayar Hutang Teman',
+        amount: 500_000,
+        isIncome: true,
+        date: DateTime(a.year, a.month, 13),
+      ),
+      TransactionModel(
+        id: 'TRX009',
+        category: 'Pendidikan',
+        description: 'Kursus Online',
+        amount: 650_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month, 14),
+      ),
+      TransactionModel(
+        id: 'TRX010',
+        category: 'Belanja',
+        description: 'Pakaian & Aksesori',
+        amount: 890_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month, 14),
+      ),
+      // ── Okt 2026 ─────────────────────────────────────────────────
+      TransactionModel(
+        id: 'TRX011',
+        category: 'Gaji',
+        description: 'Gaji Bulan Oktober',
+        amount: 8_500_000,
+        isIncome: true,
+        date: DateTime(a.year, a.month - 1, 1),
+      ),
+      TransactionModel(
+        id: 'TRX012',
+        category: 'Makan & Minum',
+        description: 'Makan Siang Kantor',
+        amount: 950_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month - 1, 15),
+      ),
+      TransactionModel(
+        id: 'TRX013',
+        category: 'Tagihan',
+        description: 'Pulsa & Internet',
+        amount: 200_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month - 1, 20),
+      ),
+      // ── Sep 2026 ─────────────────────────────────────────────────
+      TransactionModel(
+        id: 'TRX014',
+        category: 'Gaji',
+        description: 'Gaji Bulan September',
+        amount: 8_500_000,
+        isIncome: true,
+        date: DateTime(a.year, a.month - 2, 1),
+      ),
+      TransactionModel(
+        id: 'TRX015',
+        category: 'Belanja',
+        description: 'Elektronik',
+        amount: 3_500_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month - 2, 10),
+      ),
+      // Agu 2026 sengaja kosong untuk tes seri nol
+      // ── Jul 2026 ─────────────────────────────────────────────────
+      TransactionModel(
+        id: 'TRX016',
+        category: 'Gaji',
+        description: 'Gaji Bulan Juli',
+        amount: 8_500_000,
+        isIncome: true,
+        date: DateTime(a.year, a.month - 4, 1),
+      ),
+      TransactionModel(
+        id: 'TRX017',
+        category: 'Transfer Masuk',
+        description: 'Bonus Proyek',
+        amount: 2_000_000,
+        isIncome: true,
+        date: DateTime(a.year, a.month - 4, 15),
+      ),
+      TransactionModel(
+        id: 'TRX018',
+        category: 'Hiburan',
+        description: 'Liburan',
+        amount: 4_000_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month - 4, 20),
+      ),
+      // ── Jun 2026 ─────────────────────────────────────────────────
+      TransactionModel(
+        id: 'TRX019',
+        category: 'Gaji',
+        description: 'Gaji Bulan Juni',
+        amount: 8_500_000,
+        isIncome: true,
+        date: DateTime(a.year, a.month - 5, 1),
+      ),
+      TransactionModel(
+        id: 'TRX020',
+        category: 'Investasi',
+        description: 'Beli Saham',
+        amount: 5_000_000,
+        isIncome: false,
+        date: DateTime(a.year, a.month - 5, 5),
+      ),
+    ];
+  }
 
   static const List<AssetModel> assets = [
     AssetModel(
@@ -267,97 +376,35 @@ class MockData {
   ];
 
   static const List<MonthlyDataModel> monthlyData = [
-    MonthlyDataModel(month: 'Apr', income: 9_000_000, expense: 5_200_000),
-    MonthlyDataModel(month: 'Mei', income: 8_500_000, expense: 4_800_000),
-    MonthlyDataModel(month: 'Jun', income: 9_200_000, expense: 6_100_000),
-    MonthlyDataModel(month: 'Jul', income: 8_800_000, expense: 5_500_000),
-    MonthlyDataModel(month: 'Ags', income: 9_500_000, expense: 5_900_000),
-    MonthlyDataModel(month: 'Sep', income: 9_000_000, expense: 6_540_000),
+    MonthlyDataModel(month: 'Jun', income: 8_500_000, expense: 5_000_000),
+    MonthlyDataModel(month: 'Jul', income: 10_500_000, expense: 4_000_000),
+    MonthlyDataModel(month: 'Ags', income: 0, expense: 0),
+    MonthlyDataModel(month: 'Sep', income: 8_500_000, expense: 3_500_000),
+    MonthlyDataModel(month: 'Okt', income: 8_500_000, expense: 1_150_000),
+    MonthlyDataModel(month: 'Nov', income: 9_000_000, expense: 6_540_000),
   ];
 
-  static final List<TableRowModel> tableRows = [
-    TableRowModel(
-      no: 1,
-      kategori: 'Gaji',
-      jumlah: 8_500_000,
-      keterangan: 'Gaji pokok September',
-      tanggal: DateTime(2026, 9, 1),
-    ),
-    TableRowModel(
-      no: 2,
-      kategori: 'Makan & Minum',
-      jumlah: -1_200_000,
-      keterangan: 'Belanja Indomaret & warung',
-      tanggal: DateTime(2026, 9, 3),
-    ),
-    TableRowModel(
-      no: 3,
-      kategori: 'Transportasi',
-      jumlah: -450_000,
-      keterangan: 'Bensin motor & grab',
-      tanggal: DateTime(2026, 9, 5),
-    ),
-    TableRowModel(
-      no: 4,
-      kategori: 'Tagihan',
-      jumlah: -780_000,
-      keterangan: 'PLN & Indihome',
-      tanggal: DateTime(2026, 9, 7),
-    ),
-    TableRowModel(
-      no: 5,
-      kategori: 'Kesehatan',
-      jumlah: -320_000,
-      keterangan: 'K24 Apotek vitamin C',
-      tanggal: DateTime(2026, 9, 9),
-    ),
-    TableRowModel(
-      no: 6,
-      kategori: 'Investasi',
-      jumlah: -2_000_000,
-      keterangan: 'Top-up reksa dana pasar uang',
-      tanggal: DateTime(2026, 9, 10),
-    ),
-    TableRowModel(
-      no: 7,
-      kategori: 'Hiburan',
-      jumlah: -250_000,
-      keterangan: 'Netflix & Spotify',
-      tanggal: DateTime(2026, 9, 12),
-    ),
-    TableRowModel(
-      no: 8,
-      kategori: 'Transfer Masuk',
-      jumlah: 500_000,
-      keterangan: 'Piutang Budi lunas',
-      tanggal: DateTime(2026, 9, 13),
-    ),
-    TableRowModel(
-      no: 9,
-      kategori: 'Pendidikan',
-      jumlah: -650_000,
-      keterangan: 'Udemy Flutter course',
-      tanggal: DateTime(2026, 9, 14),
-    ),
-    TableRowModel(
-      no: 10,
-      kategori: 'Belanja',
-      jumlah: -890_000,
-      keterangan: 'Shopee pakaian bulanan',
-      tanggal: DateTime(2026, 9, 14),
-    ),
-  ];
+  static List<TableRowModel> get tableRows {
+    final txs = transactions;
+    return txs.asMap().entries.map((e) {
+      final t = e.value;
+      return TableRowModel(
+        no: e.key + 1,
+        kategori: t.category,
+        jumlah: t.isIncome ? t.amount : -t.amount,
+        keterangan: t.description,
+        tanggal: t.date,
+      );
+    }).toList();
+  }
 
-  static double get totalAssets =>
-      assets.fold(0, (sum, a) => sum + a.value);
+  static double get totalAssets => assets.fold(0, (sum, a) => sum + a.value);
 
-  static double get totalIncome => transactions
-      .where((t) => t.isIncome)
-      .fold(0, (sum, t) => sum + t.amount);
+  static double get totalIncome =>
+      transactions.where((t) => t.isIncome).fold(0.0, (s, t) => s + t.amount);
 
-  static double get totalExpense => transactions
-      .where((t) => !t.isIncome)
-      .fold(0, (sum, t) => sum + t.amount);
+  static double get totalExpense =>
+      transactions.where((t) => !t.isIncome).fold(0.0, (s, t) => s + t.amount);
 
   static double get netBalance => totalIncome - totalExpense;
 }

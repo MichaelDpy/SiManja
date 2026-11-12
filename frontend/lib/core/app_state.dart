@@ -1,9 +1,22 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 
 import 'mock_data.dart';
 
 /// Global in-memory state untuk aplikasi SIMANJA.
-/// Diakses via AppState.instance (singleton).
+///
+/// Diakses via [AppState.instance] (singleton).
+///
+/// Kontrak (lihat 00-panduan-tim.md § Kontrak antarmodul):
+/// - Satu-satunya sumber transaksi adalah [transactions] — daftar immutable.
+/// - Widget tidak boleh memodifikasi daftar secara langsung.
+/// - Mutasi ([addTransaction], [updateTransaction], [deleteTransaction])
+///   bersifat [Future<void>] agar call site menunggu dengan await.
+/// - Edit memakai ID stabil, bukan indeks daftar tersaring.
+/// - [transactionsLoading] dan [transactionsError] menyediakan state
+///   untuk UI loading/error; [retryTransactions] untuk mencoba ulang.
+/// - Implementasi lokal langsung selesai (tidak ada I/O async nyata);
+///   kontrak Future tetap terpenuhi sehingga C6 bisa mengganti
+///   implementasi tanpa mengubah call site.
 class AppState extends ChangeNotifier {
   AppState._();
   static final AppState instance = AppState._();
@@ -16,11 +29,37 @@ class AppState extends ChangeNotifier {
   String city = MockData.dummyUser.city;
   String job = MockData.dummyUser.job;
   double monthlyIncome = MockData.dummyUser.monthlyIncome;
-  String? photoPath; // path lokal foto profil
+
+  /// Path lokal foto profil (null = belum ada foto).
+  String? photoPath;
 
   // ── Preferensi ─────────────────────────────────────────────────────────
   bool notifEnabled = true;
   bool darkMode = true;
+
+  // ── Transaksi ──────────────────────────────────────────────────────────
+
+  List<TransactionModel> _transactions = List.from(MockData.transactions);
+
+  /// Daftar transaksi yang tidak dapat diubah langsung oleh widget.
+  /// Diurutkan: tanggal terbaru dulu, ID sebagai pembanding stabil.
+  List<TransactionModel> get transactions => List.unmodifiable(_transactions);
+
+  /// true saat operasi transaksi sedang berjalan (lokal: selalu false).
+  bool transactionsLoading = false;
+
+  /// Pesan error terakhir dari operasi transaksi; null = tidak ada error.
+  String? transactionsError;
+
+  // ── Computed ───────────────────────────────────────────────────────────
+
+  double get totalIncome =>
+      _transactions.where((t) => t.isIncome).fold(0.0, (s, t) => s + t.amount);
+
+  double get totalExpense =>
+      _transactions.where((t) => !t.isIncome).fold(0.0, (s, t) => s + t.amount);
+
+  // ── Profil actions ─────────────────────────────────────────────────────
 
   void updateProfile({
     required String newName,
@@ -56,37 +95,69 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Transaksi ──────────────────────────────────────────────────────────
-  final List<TransactionModel> _transactions = List.from(MockData.transactions);
+  // ── Transaksi actions ──────────────────────────────────────────────────
 
-  List<TransactionModel> get transactions => List.unmodifiable(_transactions);
-
-  double get totalIncome =>
-      _transactions.where((t) => t.isIncome).fold(0, (s, t) => s + t.amount);
-
-  double get totalExpense =>
-      _transactions.where((t) => !t.isIncome).fold(0, (s, t) => s + t.amount);
-
-  void addTransaction(TransactionModel tx) {
-    _transactions.insert(0, tx);
+  /// Tambah transaksi baru.
+  ///
+  /// Validasi [amount] dilakukan di sini; lempar [ArgumentError] jika gagal.
+  /// Implementasi lokal langsung selesai; C6 mengganti dengan Firestore.
+  Future<void> addTransaction(TransactionModel tx) async {
+    TransactionModel.validate(tx.amount);
+    _transactions = [tx, ..._transactions];
+    _sortTransactions();
     notifyListeners();
   }
 
-  void updateTransaction(int index, TransactionModel tx) {
-    _transactions[index] = tx;
+  /// Edit transaksi berdasarkan [id] stabil — bukan indeks daftar tersaring.
+  ///
+  /// Lempar [ArgumentError] jika ID tidak ditemukan.
+  Future<void> updateTransaction(String id, TransactionModel tx) async {
+    TransactionModel.validate(tx.amount);
+    final idx = _transactions.indexWhere((t) => t.id == id);
+    if (idx == -1) {
+      throw ArgumentError('Transaksi dengan id=$id tidak ditemukan');
+    }
+    final updated = List<TransactionModel>.from(_transactions);
+    updated[idx] = tx;
+    _transactions = updated;
+    _sortTransactions();
     notifyListeners();
   }
 
-  void deleteTransaction(String id) {
-    _transactions.removeWhere((t) => t.id == id);
+  /// Hapus transaksi berdasarkan [id].
+  ///
+  /// Tidak error jika ID tidak ada (idempoten).
+  Future<void> deleteTransaction(String id) async {
+    _transactions = _transactions.where((t) => t.id != id).toList();
     notifyListeners();
   }
 
-  String generateId() {
-    return 'TRX${DateTime.now().millisecondsSinceEpoch}';
+  /// Coba muat ulang transaksi (lokal: reset ke fixture demo).
+  ///
+  /// C6 mengganti ini dengan re-fetch dari Firestore.
+  Future<void> retryTransactions() async {
+    transactionsLoading = true;
+    transactionsError = null;
+    notifyListeners();
+    // Implementasi lokal: langsung pakai data demo
+    _transactions = List.from(MockData.transactions);
+    _sortTransactions();
+    transactionsLoading = false;
+    notifyListeners();
   }
 
-  /// Reset semua data ke default saat logout
+  /// Buat ID transaksi baru yang unik.
+  ///
+  /// Format: `TRX<millisecondsSinceEpoch>`.
+  /// Tahap cloud memeriksa benturan; jangan hanya andalkan timestamp.
+  String generateId() => 'TRX${DateTime.now().millisecondsSinceEpoch}';
+
+  // ── Reset ──────────────────────────────────────────────────────────────
+
+  /// Reset semua data ke default saat logout.
+  ///
+  /// C6/C4: saat logout, hentikan stream Firestore dan kosongkan data
+  /// sebelum mengembalikan ke halaman login.
   void reset() {
     name = MockData.dummyUser.name;
     email = MockData.dummyUser.email;
@@ -98,9 +169,19 @@ class AppState extends ChangeNotifier {
     photoPath = null;
     notifEnabled = true;
     darkMode = true;
-    _transactions
-      ..clear()
-      ..addAll(MockData.transactions);
+    transactionsLoading = false;
+    transactionsError = null;
+    _transactions = List.from(MockData.transactions);
+    _sortTransactions();
     notifyListeners();
+  }
+
+  // ── Private ────────────────────────────────────────────────────────────
+
+  void _sortTransactions() {
+    _transactions.sort((a, b) {
+      final d = b.date.compareTo(a.date);
+      return d != 0 ? d : a.id.compareTo(b.id);
+    });
   }
 }

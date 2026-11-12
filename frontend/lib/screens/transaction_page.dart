@@ -171,8 +171,9 @@ class _TransactionPageState extends State<TransactionPage>
             ),
           ),
           TextButton(
-            onPressed: () {
-              AppState.instance.deleteTransaction(tx.id);
+            onPressed: () async {
+              await AppState.instance.deleteTransaction(tx.id);
+              if (!context.mounted) return;
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -398,7 +399,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     if (picked != null) setState(() => _selectedDate = picked);
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCategory == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -427,16 +428,17 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       ),
       isIncome: cat.isIncome,
       date: _selectedDate,
-      icon: cat.icon,
-      color: cat.color,
     );
 
     if (widget.existingIndex != null) {
-      AppState.instance.updateTransaction(widget.existingIndex!, tx);
+      // A3: updateTransaction memakai ID stabil, bukan indeks.
+      // widget.existing selalu ada jika existingIndex != null.
+      await AppState.instance.updateTransaction(widget.existing!.id, tx);
     } else {
-      AppState.instance.addTransaction(tx);
+      await AppState.instance.addTransaction(tx);
     }
 
+    if (!mounted) return;
     Navigator.pop(context);
     widget.onSaved();
 
@@ -775,6 +777,7 @@ class _TxList extends StatelessWidget {
         );
         final sign = tx.isIncome ? '+' : '-';
         final amtColor = tx.isIncome ? AppColors.income : AppColors.expense;
+        final meta = CategoryMeta.of(tx.category);
 
         return Dismissible(
           key: Key(tx.id),
@@ -810,10 +813,10 @@ class _TxList extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: tx.color.withValues(alpha: 0.15),
+                      color: meta.color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(tx.icon, color: tx.color, size: 20),
+                    child: Icon(meta.icon, color: meta.color, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -837,13 +840,13 @@ class _TxList extends StatelessWidget {
                                 vertical: 2,
                               ),
                               decoration: BoxDecoration(
-                                color: tx.color.withValues(alpha: 0.12),
+                                color: meta.color.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(
                                 tx.category,
                                 style: GoogleFonts.lato(
-                                  color: tx.color,
+                                  color: meta.color,
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
                                 ),

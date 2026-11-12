@@ -545,6 +545,7 @@ class _TransactionTile extends StatelessWidget {
     final tt = Theme.of(context).textTheme;
     final sign = tx.isIncome ? '+' : '-';
     final amountColor = tx.isIncome ? AppColors.income : AppColors.expense;
+    final meta = CategoryMeta.of(tx.category);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
@@ -559,10 +560,10 @@ class _TransactionTile extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: tx.color.withValues(alpha: 0.15),
+              color: meta.color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(tx.icon, color: tx.color, size: 18),
+            child: Icon(meta.icon, color: meta.color, size: 18),
           ),
           const SizedBox(width: 12),
           Expanded(
