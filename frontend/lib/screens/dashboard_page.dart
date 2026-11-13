@@ -35,6 +35,141 @@ class _DashboardPeriod {
   int get hashCode => Object.hash(year, month);
 }
 
+/// Data notifikasi dalam aplikasi yang diturunkan dari transaksi aktual.
+class InAppNotificationItem {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+  final String time;
+
+  const InAppNotificationItem({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+    required this.time,
+  });
+
+  /// Membangun daftar notifikasi dalam aplikasi berdasarkan transaksi aktual dan periode terpilih.
+  static List<InAppNotificationItem> buildSummary({
+    required List<TransactionModel> transactions,
+    String periodLabel = 'Semua',
+    NumberFormat? currencyFormatter,
+  }) {
+    if (transactions.isEmpty) return const [];
+
+    final fmt = currencyFormatter ??
+        NumberFormat.currency(
+          locale: 'id_ID',
+          symbol: 'Rp ',
+          decimalDigits: 0,
+        );
+
+    final list = <InAppNotificationItem>[];
+    final totalIncome = FinanceSummary.totalIncome(transactions);
+    final totalExpense = FinanceSummary.totalExpense(transactions);
+    final netCashFlow = FinanceSummary.netCashFlow(transactions);
+    final savingsRate = FinanceSummary.savingsRate(transactions);
+    final expenses = FinanceSummary.expenseByCategory(transactions);
+
+    // 1. Transaksi terakhir tercatat
+    final latest = transactions.first;
+    final formattedDate =
+        DateFormat('d MMM yyyy', 'id_ID').format(latest.date);
+    list.add(
+      InAppNotificationItem(
+        icon: latest.isIncome ? Icons.arrow_downward : Icons.arrow_upward,
+        color: latest.isIncome ? AppColors.income : AppColors.expense,
+        title: latest.isIncome ? 'Pemasukan Terakhir' : 'Pengeluaran Terakhir',
+        subtitle:
+            '${latest.description} (${latest.category}) sebesar ${fmt.format(latest.amount)}',
+        time: formattedDate,
+      ),
+    );
+
+    // 2. Status Arus Kas Periode Ini
+    if (netCashFlow < 0) {
+      list.add(
+        InAppNotificationItem(
+          icon: Icons.warning_amber_rounded,
+          color: AppColors.expense,
+          title: 'Defisit Arus Kas',
+          subtitle:
+              'Pengeluaran (${fmt.format(totalExpense)}) melebihi pemasukan (${fmt.format(totalIncome)}).',
+          time: periodLabel,
+        ),
+      );
+    } else if (netCashFlow > 0) {
+      list.add(
+        InAppNotificationItem(
+          icon: Icons.trending_up,
+          color: AppColors.income,
+          title: 'Surplus Arus Kas',
+          subtitle:
+              'Arus kas positif +${fmt.format(netCashFlow)} tercatat pada periode ini.',
+          time: periodLabel,
+        ),
+      );
+    } else if (totalIncome > 0 && totalExpense > 0) {
+      list.add(
+        InAppNotificationItem(
+          icon: Icons.balance,
+          color: AppColors.teal,
+          title: 'Arus Kas Seimbang',
+          subtitle: 'Pemasukan dan pengeluaran bernilai sama.',
+          time: periodLabel,
+        ),
+      );
+    }
+
+    // 3. Kategori Pengeluaran Terbesar
+    if (expenses.isNotEmpty) {
+      final top = expenses.entries.first;
+      final meta = CategoryMeta.of(top.key);
+      list.add(
+        InAppNotificationItem(
+          icon: meta.icon,
+          color: meta.color,
+          title: 'Pengeluaran Terbesar: ${top.key}',
+          subtitle:
+              'Total ${fmt.format(top.value)} dialokasikan untuk kategori ${top.key}.',
+          time: periodLabel,
+        ),
+      );
+    }
+
+    // 4. Evaluasi Rasio Tabungan
+    if (savingsRate != null) {
+      if (savingsRate >= 20) {
+        list.add(
+          InAppNotificationItem(
+            icon: Icons.savings_outlined,
+            color: AppColors.income,
+            title: 'Rasio Tabungan Baik (${savingsRate.toStringAsFixed(1)}%)',
+            subtitle:
+                'Anda berhasil menyisihkan ${savingsRate.toStringAsFixed(1)}% dari total pemasukan.',
+            time: periodLabel,
+          ),
+        );
+      } else if (savingsRate > 0) {
+        list.add(
+          InAppNotificationItem(
+            icon: Icons.savings_outlined,
+            color: AppColors.chart6,
+            title: 'Rasio Tabungan Rendah (${savingsRate.toStringAsFixed(1)}%)',
+            subtitle:
+                'Pemasukan tersisa ${savingsRate.toStringAsFixed(1)}% setelah seluruh pengeluaran.',
+            time: periodLabel,
+          ),
+        );
+      }
+    }
+
+    return list;
+  }
+}
+
 class DashboardPage extends StatefulWidget {
   final void Function(int tabIndex)? onNavigateToTab;
 
@@ -101,78 +236,268 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  /// Membangun notifikasi dalam aplikasi yang dapat diverifikasi dari data transaksi.
+  List<InAppNotificationItem> _buildInAppNotifications(
+    List<TransactionModel> txList,
+    _DashboardPeriod period,
+  ) {
+    return InAppNotificationItem.buildSummary(
+      transactions: txList,
+      periodLabel: period.isAll ? 'Semua' : period.label,
+      currencyFormatter: _fmt,
+    );
+  }
+
   void _showNotifications() {
     final state = AppState.instance;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final tt = theme.textTheme;
+
+    final filteredTx = _filterTransactions(state.transactions);
+    final notifItems = _buildInAppNotifications(filteredTx, _selectedPeriod);
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      isScrollControlled: true,
+      backgroundColor: cs.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetCtx) => Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'Notifikasi',
-                  style: Theme.of(sheetCtx).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                Icon(
-                  state.notifEnabled
-                      ? Icons.notifications_active_outlined
-                      : Icons.notifications_off_outlined,
-                  color: state.notifEnabled
-                      ? AppColors.teal
-                      : Theme.of(sheetCtx).colorScheme.onSurfaceVariant,
-                  size: 20,
-                ),
-              ],
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(sheetCtx).size.height * 0.8,
             ),
-            const SizedBox(height: 16),
-            if (!state.notifEnabled)
-              Center(
-                child: Text(
-                  'Notifikasi dinonaktifkan.\nAktifkan di halaman Profil.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(sheetCtx).textTheme.bodyMedium,
-                ),
-              )
-            else ...[
-              const _NotifItem(
-                icon: Icons.savings_outlined,
-                color: AppColors.income,
-                title: 'Tabungan bertambah',
-                subtitle: 'Saldo rekening utama diperbarui',
-                time: 'Baru saja',
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Pegangan modal (handle bar)
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Header ringkasan
+                  Row(
+                    children: [
+                      Icon(
+                        state.notifEnabled
+                            ? Icons.notifications_active_outlined
+                            : Icons.notifications_off_outlined,
+                        color: state.notifEnabled
+                            ? AppColors.teal
+                            : cs.onSurfaceVariant,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Ringkasan Aktivitas',
+                              style: tt.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              'Dalam aplikasi • bukan push notification/FCM',
+                              style: tt.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (state.notifEnabled && notifItems.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.teal.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _selectedPeriod.isAll
+                                ? 'Semua'
+                                : _selectedPeriod.label,
+                            style: GoogleFonts.lato(
+                              color: AppColors.teal,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Konten berdasarkan status notifikasi dan data
+                  if (!state.notifEnabled) ...[
+                    // Kondisi preferensi nonaktif
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 24,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: cs.outline.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.notifications_off_outlined,
+                            size: 40,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Notifikasi Dinonaktifkan',
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Ringkasan aktivitas dalam aplikasi sedang nonaktif.\nAktifkan kembali melalui menu Profil.',
+                            textAlign: TextAlign.center,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(sheetCtx);
+                              widget.onNavigateToTab?.call(5); // Ke Profil
+                            },
+                            icon: const Icon(Icons.person_outline, size: 16),
+                            label: const Text('Buka Pengaturan Profil'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              minimumSize: const Size(44, 40),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (notifItems.isEmpty) ...[
+                    // Empty state saat tidak ada transaksi pada periode terpilih
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 24,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cs.onSurfaceVariant.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: cs.outline.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.receipt_long_outlined,
+                            size: 40,
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _selectedPeriod.isAll
+                                ? 'Belum Ada Transaksi'
+                                : 'Tidak Ada Aktivitas di ${_selectedPeriod.label}',
+                            style: tt.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Catat transaksi baru untuk melihat ringkasan aktivitas dalam aplikasi.',
+                            textAlign: TextAlign.center,
+                            style: tt.bodySmall?.copyWith(
+                              color: cs.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(sheetCtx);
+                              widget.onNavigateToTab?.call(2); // Ke Transaksi
+                            },
+                            icon: const Icon(Icons.add, size: 16),
+                            label: const Text('Tambah Transaksi'),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              minimumSize: const Size(44, 40),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else ...[
+                    // Daftar ringkasan yang diturunkan dari transaksi riil
+                    ...notifItems.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: _NotifItem(
+                          icon: item.icon,
+                          color: item.color,
+                          title: item.title,
+                          subtitle: item.subtitle,
+                          time: item.time,
+                          onTap: () {
+                            Navigator.pop(sheetCtx);
+                            widget.onNavigateToTab?.call(2); // Ke Transaksi
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          widget.onNavigateToTab?.call(2);
+                        },
+                        icon: const Icon(Icons.swap_horiz, size: 16),
+                        label: const Text('Kelola Transaksi'),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 10),
-              const _NotifItem(
-                icon: Icons.warning_amber_outlined,
-                color: AppColors.chart6,
-                title: 'Pengeluaran tinggi',
-                subtitle: 'Pengeluaran bulan ini melebihi rata-rata',
-                time: '1 jam lalu',
-              ),
-              const SizedBox(height: 10),
-              const _NotifItem(
-                icon: Icons.trending_up,
-                color: AppColors.chart2,
-                title: 'Investasi naik 2.3%',
-                subtitle: 'Portofolio reksa dana kamu meningkat',
-                time: '3 jam lalu',
-              ),
-            ],
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -234,30 +559,19 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                     const SizedBox(width: 8),
                     // Lonceng notifikasi
-                    Stack(
-                      children: [
-                        IconButton(
-                          onPressed: _showNotifications,
-                          icon: Icon(
-                            Icons.notifications_outlined,
-                            color: cs.onSurfaceVariant,
-                          ),
-                          tooltip: 'Notifikasi',
-                        ),
-                        if (state.notifEnabled)
-                          Positioned(
-                            top: 8,
-                            right: 8,
-                            child: Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: AppColors.expense,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                      ],
+                    IconButton(
+                      onPressed: _showNotifications,
+                      icon: Icon(
+                        state.notifEnabled
+                            ? Icons.notifications_outlined
+                            : Icons.notifications_off_outlined,
+                        color: state.notifEnabled
+                            ? cs.onSurface
+                            : cs.onSurfaceVariant.withValues(alpha: 0.6),
+                      ),
+                      tooltip: state.notifEnabled
+                          ? 'Ringkasan Aktivitas'
+                          : 'Notifikasi Dinonaktifkan',
                     ),
                     const SizedBox(width: 4),
                     // Avatar profil
@@ -965,7 +1279,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-// ── Item Notifikasi ────────────────────────────────────────────────────────
+// ── Item Notifikasi Dalam Aplikasi ─────────────────────────────────────────
 
 class _NotifItem extends StatelessWidget {
   final IconData icon;
@@ -973,6 +1287,7 @@ class _NotifItem extends StatelessWidget {
   final String title;
   final String subtitle;
   final String time;
+  final VoidCallback? onTap;
 
   const _NotifItem({
     required this.icon,
@@ -980,50 +1295,96 @@ class _NotifItem extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.time,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final tt = Theme.of(context).textTheme;
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final tt = theme.textTheme;
+    final cs = theme.colorScheme;
 
-    return Row(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
+    return Material(
+      color: cs.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: cs.outline.withValues(alpha: 0.25),
+              width: 0.5,
+            ),
           ),
-          child: Icon(icon, color: color, size: 18),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: color, size: 18),
               ),
-              Text(
-                subtitle,
-                style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: tt.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          time,
+                          style: tt.bodySmall?.copyWith(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: tt.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontSize: 11,
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right,
+                  size: 16,
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                ),
+              ],
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        Text(
-          time,
-          style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
-        ),
-      ],
+      ),
     );
   }
 }
