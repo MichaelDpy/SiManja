@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../core/app_state.dart';
+import '../core/csv_exporter.dart';
 import '../core/finance_summary.dart';
 import '../core/theme.dart';
 import '../models/transaction_model.dart';
@@ -60,6 +61,7 @@ class _DataTablePageState extends State<DataTablePage> {
   bool _sortAscending = false; // default: terbaru dulu
   String _filterText = '';
   _PeriodFilter _period = const _PeriodFilter(); // semua
+  bool _exporting = false;
 
   @override
   void initState() {
@@ -176,6 +178,61 @@ class _DataTablePageState extends State<DataTablePage> {
     });
   }
 
+  Future<void> _export() async {
+    if (_exporting) return;
+    final rows = _displayRows;
+    if (rows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Tidak ada data untuk diekspor'),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _exporting = true);
+    try {
+      final result = await CsvExporter.export(
+        transactions: rows,
+        periodLabel: _period.label,
+      );
+      if (!mounted) return;
+
+      if (result.isSuccess) {
+        // Share sheet sudah terbuka — tidak perlu SnackBar "berhasil tersimpan"
+        // karena file baru benar-benar disimpan setelah pengguna memilih tujuan.
+      } else if (result.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Tidak ada transaksi untuk diekspor'),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      } else if (result.isFailure) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal mengekspor: ${result.errorMessage}'),
+            backgroundColor: AppColors.expense,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+      // isCancelled: pengguna menutup share sheet sendiri — tidak perlu feedback
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   final _searchCtrl = TextEditingController();
 
   @override
@@ -195,14 +252,26 @@ class _DataTablePageState extends State<DataTablePage> {
       appBar: AppBar(
         title: const Text('Data Transaksi'),
         actions: [
-          // Tombol ekspor — belum aktif (dilanjutkan B4)
-          Tooltip(
-            message: 'Ekspor CSV (segera hadir)',
-            child: IconButton(
-              icon: const Icon(Icons.download_outlined),
-              onPressed: null, // disabled — B4
-            ),
-          ),
+          // Ekspor CSV hasil filter aktif
+          _exporting
+              ? const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.teal,
+                    ),
+                  ),
+                )
+              : Tooltip(
+                  message: 'Ekspor CSV',
+                  child: IconButton(
+                    icon: const Icon(Icons.download_outlined),
+                    onPressed: _export,
+                  ),
+                ),
         ],
       ),
       body: Column(
