@@ -68,5 +68,17 @@
 		</array>
 		<key>UIStatusBarHidden</key>
 		<false/>
+
+		<!-- Izin kamera: digunakan untuk mengambil foto profil pengguna -->
+		<key>NSCameraUsageDescription</key>
+		<string>SIMANJA membutuhkan akses kamera untuk mengambil foto profil Anda.</string>
+
+		<!-- Izin galeri baca: digunakan untuk memilih foto profil dari galeri -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>SIMANJA membutuhkan akses galeri untuk memilih foto profil Anda.</string>
+
+		<!-- Izin galeri tambah: diperlukan pada iOS 14+ untuk menyimpan foto dari kamera -->
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>SIMANJA membutuhkan izin untuk menyimpan foto yang diambil ke galeri Anda.</string>
 	</dict>
 </plist>
