@@ -15,12 +15,31 @@ service cloud.firestore {
         && data.darkMode is bool && data.notifEnabled is bool
         && data.createdAt is timestamp && data.updatedAt == request.time;
     }
+    function validTransaction(data) {
+      return data.keys().hasAll(['category', 'description', 'amount', 'isIncome', 'date', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['category', 'description', 'amount', 'isIncome', 'date', 'createdAt', 'updatedAt'])
+        && data.category is string && data.category.size() > 0 && data.category.size() <= 120
+        && !data.category.matches('\\s*')
+        && data.description is string && data.description.size() > 0 && data.description.size() <= 1000
+        && !data.description.matches('\\s*')
+        && data.amount is int && data.amount > 0 && data.amount <= 9007199254740991
+        && data.isIncome is bool && data.date is timestamp
+        && data.date >= timestamp.date(1900, 1, 1) && data.date < timestamp.date(2201, 1, 1)
+        && data.createdAt is timestamp && data.updatedAt == request.time;
+    }
     match /users/{uid} {
       allow get: if owns(uid);
       allow create: if owns(uid) && validProfile(request.resource.data)
         && request.resource.data.createdAt == request.time;
       allow update: if owns(uid) && validProfile(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt;
+      match /transactions/{id} {
+        allow read, delete: if owns(uid);
+        allow create: if owns(uid) && validTransaction(request.resource.data)
+          && request.resource.data.createdAt == request.time;
+        allow update: if owns(uid) && validTransaction(request.resource.data)
+          && request.resource.data.createdAt == resource.data.createdAt;
+      }
     }
     match /{document=**} { allow read, write: if false; }
   }
