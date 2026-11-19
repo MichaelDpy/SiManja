@@ -1,30 +1,25 @@
+import 'dart:async';
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 
 import 'mock_data.dart';
 import '../models/user_profile.dart';
 import '../repositories/profile_repository.dart';
+import '../repositories/transaction_repository.dart';
 
-/// Global in-memory state untuk aplikasi SIMANJA.
-///
-/// Diakses via [AppState.instance] (singleton).
-///
-/// Kontrak (lihat 00-panduan-tim.md § Kontrak antarmodul):
-/// - Satu-satunya sumber transaksi adalah [transactions] — daftar immutable.
-/// - Widget tidak boleh memodifikasi daftar secara langsung.
-/// - Mutasi ([addTransaction], [updateTransaction], [deleteTransaction])
-///   bersifat [Future<void>] agar call site menunggu dengan await.
-/// - Edit memakai ID stabil, bukan indeks daftar tersaring.
-/// - [transactionsLoading] dan [transactionsError] menyediakan state
-///   untuk UI loading/error; [retryTransactions] untuk mencoba ulang.
-/// - Implementasi lokal langsung selesai (tidak ada I/O async nyata);
-///   kontrak Future tetap terpenuhi sehingga C6 bisa mengganti
-///   implementasi tanpa mengubah call site.
+/// Facade tunggal untuk profil dan stream transaksi milik UID aktif.
+/// Implementasi lokal hanya tersedia untuk fixture pengujian eksplisit.
 class AppState extends ChangeNotifier {
-  AppState._() : _allowLocalProfile = false;
+  AppState._() : _allowLocalProfile = false, _allowLocalTransactions = false;
   @visibleForTesting
-  AppState.forTesting({ProfileRepository? profiles})
-    : _profileRepository = profiles,
-      _allowLocalProfile = profiles == null;
+  AppState.forTesting({
+    ProfileRepository? profiles,
+    TransactionRepository? transactions,
+  }) : _profileRepository = profiles,
+       _allowLocalProfile = profiles == null,
+       _transactionRepository = transactions,
+       _allowLocalTransactions = transactions == null;
   static final AppState instance = AppState._();
 
   ProfileRepository? _profileRepository;
@@ -42,6 +37,33 @@ class AppState extends ChangeNotifier {
     _allowLocalProfile = false;
   }
 
+  TransactionRepository? _transactionRepository;
+  bool _allowLocalTransactions;
+  StreamSubscription<TransactionSnapshot>? _transactionSubscription;
+  int _transactionGeneration = 0;
+  String? _streamUid;
+  final Set<String> _mutatingIds = {};
+  int pendingMutations = 0;
+  bool transactionsFromCache = false;
+  bool transactionsHasPendingWrites = false;
+  bool get hasTransactionRepository => _transactionRepository != null;
+
+  void useTransactionRepository(TransactionRepository repository) {
+    if (identical(_transactionRepository, repository)) return;
+    _transactionGeneration++;
+    _transactionSubscription?.cancel();
+    _transactionSubscription = null;
+    _streamUid = null;
+    _transactionRepository = repository;
+    _allowLocalTransactions = false;
+  }
+
+  void _startTransactionsIfNeeded() {
+    if (profileReady && sessionUid != null && _streamUid != sessionUid) {
+      unawaited(retryTransactions());
+    }
+  }
+
   String? sessionUid;
   int _sessionRevision = 0;
   int get sessionRevision => _sessionRevision;
@@ -54,6 +76,7 @@ class AppState extends ChangeNotifier {
     }
     email = authEmail;
     if (!profileReady) return retryProfile();
+    _startTransactionsIfNeeded();
     notifyListeners();
     return Future.value();
   }
@@ -91,6 +114,7 @@ class AppState extends ChangeNotifier {
       _applyProfile(profile);
       _loadedProfile = profile;
       profileReady = true;
+      _startTransactionsIfNeeded();
     } catch (error) {
       if (revision == _sessionRevision) {
         profileError = error is FormatException || error is ArgumentError
@@ -166,6 +190,14 @@ class AppState extends ChangeNotifier {
 
   void _clearUserData() {
     _sessionRevision++;
+    _transactionGeneration++;
+    _transactionSubscription?.cancel();
+    _transactionSubscription = null;
+    _streamUid = null;
+    _mutatingIds.clear();
+    pendingMutations = 0;
+    transactionsFromCache = false;
+    transactionsHasPendingWrites = false;
     sessionUid = null;
     name = '';
     email = '';
@@ -211,10 +243,10 @@ class AppState extends ChangeNotifier {
   /// Diurutkan: tanggal terbaru dulu, ID sebagai pembanding stabil.
   List<TransactionModel> get transactions => List.unmodifiable(_transactions);
 
-  /// true saat operasi transaksi sedang berjalan (lokal: selalu false).
+  /// Menunggu snapshot pertama dari langganan aktif.
   bool transactionsLoading = false;
 
-  /// Pesan error terakhir dari operasi transaksi; null = tidak ada error.
+  /// Pesan kegagalan langganan; kegagalan write dikembalikan ke pemanggil.
   String? transactionsError;
 
   // ── Computed ───────────────────────────────────────────────────────────
@@ -266,63 +298,152 @@ class AppState extends ChangeNotifier {
 
   /// Tambah transaksi baru.
   ///
-  /// Validasi [amount] dilakukan di sini; lempar [ArgumentError] jika gagal.
-  /// Implementasi lokal langsung selesai; C6 mengganti dengan Firestore.
+  /// Runtime menunggu konfirmasi repository; daftar diperbarui oleh stream.
   Future<void> addTransaction(TransactionModel tx) async {
     TransactionModel.validate(tx.amount);
-    _transactions = [tx, ..._transactions];
-    _sortTransactions();
-    notifyListeners();
+    if (_allowLocalTransactions) {
+      if (_transactions.any((item) => item.id == tx.id)) {
+        throw StateError('ID sudah digunakan.');
+      }
+      _transactions = [tx, ..._transactions];
+      _sortTransactions();
+      notifyListeners();
+      return;
+    }
+    TransactionMapper.toMap(tx);
+    await _mutate(tx.id, (repository, uid) => repository.add(uid, tx));
   }
 
-  /// Edit transaksi berdasarkan [id] stabil — bukan indeks daftar tersaring.
-  ///
-  /// Lempar [ArgumentError] jika ID tidak ditemukan.
   Future<void> updateTransaction(String id, TransactionModel tx) async {
     TransactionModel.validate(tx.amount);
-    final idx = _transactions.indexWhere((t) => t.id == id);
-    if (idx == -1) {
-      throw ArgumentError('Transaksi dengan id=$id tidak ditemukan');
+    if (id != tx.id) throw ArgumentError('ID transaksi tidak boleh berubah.');
+    if (_allowLocalTransactions) {
+      final index = _transactions.indexWhere((item) => item.id == id);
+      if (index == -1) throw ArgumentError('Transaksi tidak ditemukan.');
+      _transactions = List.from(_transactions)..[index] = tx;
+      _sortTransactions();
+      notifyListeners();
+      return;
     }
-    final updated = List<TransactionModel>.from(_transactions);
-    updated[idx] = tx;
-    _transactions = updated;
-    _sortTransactions();
-    notifyListeners();
+    TransactionMapper.toMap(tx);
+    await _mutate(id, (repository, uid) => repository.update(uid, id, tx));
   }
 
-  /// Hapus transaksi berdasarkan [id].
-  ///
-  /// Tidak error jika ID tidak ada (idempoten).
   Future<void> deleteTransaction(String id) async {
-    _transactions = _transactions.where((t) => t.id != id).toList();
-    notifyListeners();
+    if (_allowLocalTransactions) {
+      _transactions = _transactions.where((item) => item.id != id).toList();
+      notifyListeners();
+      return;
+    }
+    TransactionMapper.validateId(id);
+    await _mutate(id, (repository, uid) => repository.delete(uid, id));
   }
 
-  /// Periksa ulang state lokal tanpa mengisi data contoh akun lain.
-  ///
-  /// C6 mengganti ini dengan re-fetch dari Firestore.
+  Future<void> _mutate(
+    String id,
+    Future<void> Function(TransactionRepository, String) action,
+  ) async {
+    final repository = _transactionRepository;
+    final uid = sessionUid;
+    if (repository == null || uid == null || !profileReady) {
+      throw StateError('Sesi transaksi belum siap.');
+    }
+    if (!_mutatingIds.add(id)) {
+      throw StateError('Transaksi ini masih diproses.');
+    }
+    final revision = _sessionRevision;
+    pendingMutations++;
+    notifyListeners();
+    try {
+      await action(repository, uid);
+      if (revision != _sessionRevision) throw StateError('Sesi telah berubah.');
+    } catch (_) {
+      throw StateError(
+        'Perubahan belum dikonfirmasi server. Periksa koneksi atau izin akun.',
+      );
+    } finally {
+      if (revision == _sessionRevision) {
+        pendingMutations--;
+        _mutatingIds.remove(id);
+        notifyListeners();
+      }
+    }
+  }
+
   Future<void> retryTransactions() async {
+    if (_allowLocalTransactions) {
+      transactionsLoading = false;
+      transactionsError = null;
+      _sortTransactions();
+      notifyListeners();
+      return;
+    }
+    final uid = sessionUid;
+    final repository = _transactionRepository;
+    if (uid == null || repository == null) return;
+    final revision = _sessionRevision;
+    final generation = ++_transactionGeneration;
+    _transactionSubscription?.cancel();
+    _transactionSubscription = null;
+    _streamUid = uid;
     transactionsLoading = true;
     transactionsError = null;
     notifyListeners();
-    _sortTransactions();
-    transactionsLoading = false;
-    notifyListeners();
+    bool active() =>
+        revision == _sessionRevision && generation == _transactionGeneration;
+    void failed(Object error) {
+      if (!active()) return;
+      transactionsLoading = false;
+      transactionsError = error is FormatException || error is ArgumentError
+          ? 'Ada data transaksi tidak valid. Periksa data akun sebelum mencoba lagi.'
+          : 'Transaksi belum dapat dimuat. Periksa koneksi lalu coba lagi.';
+      notifyListeners();
+    }
+
+    try {
+      _transactionSubscription = repository
+          .watch(uid)
+          .listen(
+            (snapshot) {
+              scheduleMicrotask(() {
+                if (!active()) return;
+                _transactions = List.from(snapshot.transactions);
+                _sortTransactions();
+                transactionsFromCache = snapshot.fromCache;
+                transactionsHasPendingWrites = snapshot.hasPendingWrites;
+                transactionsLoading = false;
+                transactionsError = null;
+                notifyListeners();
+              });
+            },
+            onError: (Object error) => scheduleMicrotask(() => failed(error)),
+            onDone: () =>
+                scheduleMicrotask(() => failed(StateError('Stream terputus.'))),
+          );
+    } catch (error) {
+      failed(error);
+    }
   }
 
-  /// Buat ID transaksi baru yang unik.
-  ///
-  /// Format: `TRX<millisecondsSinceEpoch>`.
-  /// Tahap cloud memeriksa benturan; jangan hanya andalkan timestamp.
-  String generateId() => 'TRX${DateTime.now().millisecondsSinceEpoch}';
+  String generateId() {
+    if (!_allowLocalTransactions) {
+      if (sessionUid == null || _transactionRepository == null) {
+        throw StateError('Sesi transaksi belum siap.');
+      }
+      return _transactionRepository!.newId(sessionUid!);
+    }
+    final random = Random.secure();
+    const alphabet =
+        'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    return List.generate(
+      20,
+      (_) => alphabet[random.nextInt(alphabet.length)],
+    ).join();
+  }
 
   // ── Reset ──────────────────────────────────────────────────────────────
 
   /// Fixture eksplisit untuk tes frontend; tidak dipanggil alur logout.
-  ///
-  /// C6/C4: saat logout, hentikan stream Firestore dan kosongkan data
-  /// sebelum mengembalikan ke halaman login.
   @visibleForTesting
   void reset() {
     _clearUserData();
@@ -341,6 +462,7 @@ class AppState extends ChangeNotifier {
     _transactions = List.from(MockData.transactions);
     _sortTransactions();
     _allowLocalProfile = true;
+    _allowLocalTransactions = true;
     profileReady = true;
     _loadedProfile = _currentProfile();
     notifyListeners();
@@ -358,6 +480,8 @@ class AppState extends ChangeNotifier {
   @override
   void dispose() {
     _sessionRevision++;
+    _transactionGeneration++;
+    _transactionSubscription?.cancel();
     super.dispose();
   }
 }

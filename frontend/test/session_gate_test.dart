@@ -15,6 +15,7 @@ import 'package:simanja/widgets/session_scope.dart';
 
 import 'support/session_auth.dart';
 import 'support/memory_profiles.dart';
+import 'support/memory_transactions.dart';
 
 class ProtectedHome extends StatelessWidget {
   const ProtectedHome({super.key});
@@ -83,6 +84,7 @@ void main() {
   setUp(() {
     AppState.instance.clearSession();
     AppState.instance.useProfileRepository(MemoryProfiles());
+    AppState.instance.useTransactionRepository(MemoryTransactions());
   });
 
   Future<void> cleanup(WidgetTester tester, SessionAuth auth) async {

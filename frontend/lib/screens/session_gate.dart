@@ -4,6 +4,8 @@ import '../core/app_state.dart';
 import '../core/session_controller.dart';
 import '../core/firebase_bootstrap.dart';
 import '../repositories/profile_repository.dart';
+import '../repositories/transaction_repository.dart';
+import '../widgets/transaction_sync_status.dart';
 import '../services/auth_service.dart';
 import '../widgets/session_scope.dart';
 import 'intro_page.dart';
@@ -18,12 +20,14 @@ class SessionGate extends StatefulWidget {
     this.showIntroWhenSignedOut = false,
     this.homeBuilder,
     this.profiles,
+    this.transactions,
   });
   final AuthGateway? auth;
   final AppState? state;
   final bool showIntroWhenSignedOut;
   final WidgetBuilder? homeBuilder;
   final ProfileRepository? profiles;
+  final TransactionRepository? transactions;
 
   @override
   State<SessionGate> createState() => _SessionGateState();
@@ -39,6 +43,15 @@ class _SessionGateState extends State<SessionGate> {
     super.initState();
     try {
       final state = widget.state ?? AppState.instance;
+      if (widget.transactions != null) {
+        state.useTransactionRepository(widget.transactions!);
+      } else if (!state.hasTransactionRepository) {
+        state.useTransactionRepository(
+          FirestoreTransactionRepository.lazy(
+            () => FirebaseBootstrap.firestore,
+          ),
+        );
+      }
       if (widget.profiles != null) {
         state.useProfileRepository(widget.profiles!);
       } else if (!state.hasProfileRepository) {
@@ -205,11 +218,18 @@ class _SessionGateState extends State<SessionGate> {
     }
     return SessionScope(
       controller: session,
-      child: KeyedSubtree(
-        key: ValueKey(session.user!.uid),
-        child: widget.homeBuilder == null
-            ? const MainShell()
-            : Builder(builder: widget.homeBuilder!),
+      child: Column(
+        children: [
+          TransactionSyncStatus(state: state),
+          Expanded(
+            child: KeyedSubtree(
+              key: ValueKey(session.user!.uid),
+              child: widget.homeBuilder == null
+                  ? const MainShell()
+                  : Builder(builder: widget.homeBuilder!),
+            ),
+          ),
+        ],
       ),
     );
   }

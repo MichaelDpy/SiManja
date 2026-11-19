@@ -11,6 +11,7 @@ import 'package:simanja/screens/session_gate.dart';
 import 'package:simanja/services/auth_service.dart';
 
 import 'support/memory_profiles.dart';
+import 'support/memory_transactions.dart';
 import 'support/session_auth.dart';
 
 Finder field(String name) => find.descendant(
@@ -41,6 +42,7 @@ void main() {
     );
     auth = SessionAuth(currentUser: const SessionUser('A', 'a@example.com'));
     AppState.instance.clearSession();
+    AppState.instance.useTransactionRepository(MemoryTransactions());
   });
   Future<void> pump(WidgetTester tester) async {
     addTearDown(() async {

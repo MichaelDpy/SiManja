@@ -480,125 +480,134 @@ class _DataTablePageState extends State<DataTablePage> {
   }
 
   Widget _buildTable(BuildContext context, List<TransactionModel> rows) {
-    return Scrollbar(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    return LayoutBuilder(
+      builder: (context, constraints) => Scrollbar(
         child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            // Lebar minimum agar tabel tidak terlalu sempit di layar lebar,
-            // tapi tetap bisa di-scroll horizontal di layar 320.
-            constraints: BoxConstraints(
-              minWidth: MediaQuery.of(context).size.width - 32,
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(16),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ConstrainedBox(
+              // Lebar pasti: scroll horizontal memberi constraint tak terbatas.
+              // 430 = kolom 36 + 160 + 140 + 70, ditambah padding 24.
+              constraints: BoxConstraints(
+                minWidth: (constraints.maxWidth - 32).clamp(
+                  430.0,
+                  double.infinity,
+                ),
+                maxWidth: (constraints.maxWidth - 32).clamp(
+                  430.0,
+                  double.infinity,
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ── Header ───────────────────────────────────────
-                  _TableHeader(
-                    sortCol: _sortCol,
-                    ascending: _sortAscending,
-                    onSort: _sort,
-                  ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ── Header ───────────────────────────────────────
+                    _TableHeader(
+                      sortCol: _sortCol,
+                      ascending: _sortAscending,
+                      onSort: _sort,
+                    ),
 
-                  // ── Baris data ───────────────────────────────────
-                  ...rows.asMap().entries.map((e) {
-                    final idx = e.key;
-                    final tx = e.value;
-                    final isEven = idx % 2 == 0;
-                    final signed = tx.isIncome ? tx.amount : -tx.amount;
-                    final amtColor = tx.isIncome
-                        ? AppColors.income
-                        : AppColors.expense;
-                    final sign = tx.isIncome ? '+' : '−';
+                    // ── Baris data ───────────────────────────────────
+                    ...rows.asMap().entries.map((e) {
+                      final idx = e.key;
+                      final tx = e.value;
+                      final isEven = idx % 2 == 0;
+                      final signed = tx.isIncome ? tx.amount : -tx.amount;
+                      final amtColor = tx.isIncome
+                          ? AppColors.income
+                          : AppColors.expense;
+                      final sign = tx.isIncome ? '+' : '−';
 
-                    return Container(
-                      color: isEven
-                          ? Colors.transparent
-                          : Theme.of(context).colorScheme.onSurface
-                                .withValues(alpha: 0.03),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 11,
-                      ),
-                      child: Row(
-                        children: [
-                          // No — mengikuti urutan tampilan
-                          SizedBox(
-                            width: 36,
-                            child: Text(
-                              '${idx + 1}',
-                              style: GoogleFonts.lato(
-                                color: AppColors.textMuted,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                          // Kategori + keterangan
-                          SizedBox(
-                            width: 160,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  tx.category,
-                                  style: GoogleFonts.lato(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurface,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                      return Container(
+                        color: isEven
+                            ? Colors.transparent
+                            : Theme.of(context).colorScheme.onSurface
+                                  .withValues(alpha: 0.03),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 11,
+                        ),
+                        child: Row(
+                          children: [
+                            // No — mengikuti urutan tampilan
+                            SizedBox(
+                              width: 36,
+                              child: Text(
+                                '${idx + 1}',
+                                style: GoogleFonts.lato(
+                                  color: AppColors.textMuted,
+                                  fontSize: 12,
                                 ),
-                                Text(
-                                  tx.description,
-                                  style: GoogleFonts.lato(
-                                    color: AppColors.textMuted,
-                                    fontSize: 10,
+                              ),
+                            ),
+                            // Kategori + keterangan
+                            SizedBox(
+                              width: 160,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    tx.category,
+                                    style: GoogleFonts.lato(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
+                                  Text(
+                                    tx.description,
+                                    style: GoogleFonts.lato(
+                                      color: AppColors.textMuted,
+                                      fontSize: 10,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Jumlah
+                            SizedBox(
+                              width: 140,
+                              child: Text(
+                                '$sign${_currencyFmt.format(signed.abs())}',
+                                style: GoogleFonts.lato(
+                                  color: amtColor,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
                                 ),
-                              ],
-                            ),
-                          ),
-                          // Jumlah
-                          SizedBox(
-                            width: 140,
-                            child: Text(
-                              '$sign${_currencyFmt.format(signed.abs())}',
-                              style: GoogleFonts.lato(
-                                color: amtColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          // Tanggal
-                          SizedBox(
-                            width: 70,
-                            child: Text(
-                              _dateFmt.format(tx.date),
-                              style: GoogleFonts.lato(
-                                color: AppColors.textMuted,
-                                fontSize: 11,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
+                            // Tanggal
+                            SizedBox(
+                              width: 70,
+                              child: Text(
+                                _dateFmt.format(tx.date),
+                                style: GoogleFonts.lato(
+                                  color: AppColors.textMuted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
 
-                  // ── Footer total (dari periode terfilter) ─────────
-                  _TableFooter(net: _summaryNet, periodLabel: _period.label),
-                ],
+                    // ── Footer total (dari periode terfilter) ─────────
+                    _TableFooter(net: _summaryNet, periodLabel: _period.label),
+                  ],
+                ),
               ),
             ),
           ),
