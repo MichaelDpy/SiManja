@@ -1,0 +1,17 @@
+{
+  "name": "simanja-backend-tests",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.16.0"
+  },
+  "scripts": {
+    "emulators": "firebase emulators:start --project demo-simanja",
+    "test": "firebase emulators:exec --only auth,firestore --project demo-simanja \"node --test --test-concurrency=1 test/*.test.mjs\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0",
+    "firebase-tools": "^15.37.0"
+  }
+}
