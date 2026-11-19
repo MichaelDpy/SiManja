@@ -117,15 +117,15 @@ Hasil yang benar-benar dijalankan pada 19 November 2026:
 
 Uji widget gabungan memakai repository/Auth pengujian untuk menjalankan login → tambah/edit transaksi → tabel/grafik → simpan profil → logout → akun B kosong → login ulang A → hapus. Uji emulator terpisah membuktikan perilaku Auth/Firestore nyata. Dua tes aset lama disesuaikan dengan dataset saat ini (enam kategori, total Rp 87.000.000) dan navigasi chip yang dapat digeser, tanpa mengubah fitur aset.
 
-Build `flutter build apk --debug --no-pub` awal gagal pada cache incremental Kotlin Windows. Build ulang berhasil memakai opsi yang hanya berlaku pada pemanggilan berikut:
+Pada verifikasi C8, build awal gagal pada cache incremental Kotlin Windows dan berhasil dengan opsi sementara. Perbaikan tanggal 20 November 2026 menyimpan `kotlin.incremental=false` dan `kotlin.compiler.execution.strategy=in-process` pada `frontend/android/gradle.properties`, sehingga build standar berikut sudah berhasil tanpa flag tambahan:
 
 ```powershell
-# Dari frontend/android/.
-.\gradlew.bat assembleDebug '-Pkotlin.incremental=false' '-Pkotlin.compiler.execution.strategy=in-process' --console=plain
+# Dari frontend/.
+flutter build apk --debug --no-pub
 ```
 
-APK ada di `frontend/build/app/outputs/apk/debug/app-debug.apk` dan tidak ikut Git. Keberhasilan build belum merupakan verifikasi runtime pada perangkat.
+APK ada di `frontend/build/app/outputs/apk/debug/app-debug.apk` dan tidak ikut Git. Pada pemeriksaan 20 November 2026, startup dari proses baru juga berhasil menampilkan halaman awal di Android Emulator Pixel 7a. Perangkat fisik/iOS belum diverifikasi.
 
 Untuk demo/handoff A8: daftar akun A, tambah pemasukan/pengeluaran pada periode yang dipilih, tunjukkan perubahan Dasbor/Data/Analitik, lalu edit/hapus. Simpan nama/tema dan login ulang untuk menunjukkan persistensi. Buka akun B untuk menunjukkan data terpisah, kemudian tunjukkan cache/pending/error tanpa menyebut write tertunda sudah diterima server.
 
-Jawaban presentasi mengikuti batas implementasi: aset tidak ikut berubah karena masih data contoh; pemisahan akun ditegakkan oleh rules selain UI; password dikelola Auth; verifikasi backend saat ini menggunakan emulator. Setup, schema, hasil pengujian, dan batas fitur dirangkum pada README ini tanpa menambah file panduan atau log ke repository.
+Jawaban presentasi mengikuti batas implementasi: aset tidak ikut berubah karena masih data contoh; pemisahan akun ditegakkan oleh rules selain UI; password dikelola Auth; verifikasi backend saat ini menggunakan emulator.

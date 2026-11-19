@@ -6,8 +6,7 @@ import 'package:flutter/foundation.dart';
 /// Emulator adalah default pengembangan. Cloud memerlukan konfigurasi asli.
 abstract final class FirebaseBootstrap {
   static FirebaseApp? _app;
-  static FirebaseApp get app =>
-      _app ?? Firebase.app(useEmulators ? projectId : defaultFirebaseAppName);
+  static FirebaseApp get app => _app ?? Firebase.app();
   static FirebaseAuth get auth => FirebaseAuth.instanceFor(app: app);
   static FirebaseFirestore get firestore =>
       FirebaseFirestore.instanceFor(app: app);
@@ -26,9 +25,20 @@ abstract final class FirebaseBootstrap {
         if (!projectId.startsWith('demo-')) {
           throw StateError('Mode emulator memerlukan project ID demo-.');
         }
+        // Firestore platform interface memerlukan app default, juga saat demo.
+        // demoProjectId tanpa name justru membuat app bernama project ID.
+        final existing = Firebase.apps
+            .where((item) => item.name == defaultFirebaseAppName)
+            .firstOrNull;
+        if (existing != null && existing.options.projectId != projectId) {
+          throw StateError('App Firebase default memakai project berbeda.');
+        }
         _app =
-            Firebase.apps.where((item) => item.name == projectId).firstOrNull ??
-            await Firebase.initializeApp(demoProjectId: projectId);
+            existing ??
+            await Firebase.initializeApp(
+              name: defaultFirebaseAppName,
+              demoProjectId: projectId,
+            );
       } else {
         const apiKey = String.fromEnvironment('FIREBASE_API_KEY');
         const appId = String.fromEnvironment('FIREBASE_APP_ID');
