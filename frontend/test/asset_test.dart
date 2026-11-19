@@ -71,16 +71,25 @@ void main() {
     });
 
     test('filterByCategory menyaring sesuai kategori yang dipilih', () {
-      final filtered = AssetCalculator.filterByCategory(testAssets, 'Investasi');
+      final filtered = AssetCalculator.filterByCategory(
+        testAssets,
+        'Investasi',
+      );
       expect(filtered.length, 1);
       expect(filtered.first.name, 'Investasi');
       expect(filtered.first.value, 30000000.0);
     });
 
-    test('filterByCategory mengembalikan list kosong jika kategori tidak ada', () {
-      final filtered = AssetCalculator.filterByCategory(testAssets, 'Properti');
-      expect(filtered.isEmpty, isTrue);
-    });
+    test(
+      'filterByCategory mengembalikan list kosong jika kategori tidak ada',
+      () {
+        final filtered = AssetCalculator.filterByCategory(
+          testAssets,
+          'Properti',
+        );
+        expect(filtered.isEmpty, isTrue);
+      },
+    );
 
     test('getScopeLabel menjelaskan cakupan dengan benar', () {
       expect(
@@ -100,12 +109,10 @@ void main() {
 
   // ── AssetPage Widget Tests ───────────────────────────────────────────────
   group('AssetPage Widget Tests', () {
-    testWidgets('menampilkan Total Nilai Aset dan menghapus klaim fiktif', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: AssetPage(),
-        ),
-      );
+    testWidgets('menampilkan Total Nilai Aset dan menghapus klaim fiktif', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: AssetPage()));
       await tester.pump();
 
       // Memastikan label Aset Bersih telah diganti menjadi Total Nilai Aset
@@ -121,63 +128,70 @@ void main() {
         findsOneWidget,
       );
 
-      // Memastikan total nominal awal sesuai MockData (Rp 86.500.000)
-      expect(find.textContaining('86.500.000'), findsWidgets);
+      // Dataset saat ini: enam kategori, termasuk Lainnya Rp 500.000.
+      expect(find.textContaining('87.000.000'), findsWidgets);
     });
 
-    testWidgets('filter kategori melalui chip memperbarui total dan daftar', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: AssetPage(),
-        ),
-      );
+    testWidgets('filter kategori melalui chip memperbarui total dan daftar', (
+      tester,
+    ) async {
+      await tester.pumpWidget(const MaterialApp(home: AssetPage()));
       await tester.pump();
 
       // Pilih chip Investasi
       final investasiChip = find.widgetWithText(ChoiceChip, 'Investasi');
       expect(investasiChip, findsOneWidget);
 
+      await tester.ensureVisible(investasiChip);
+      await tester.pumpAndSettle();
       await tester.tap(investasiChip);
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       // Label total terfilter menjelaskan cakupannya
       expect(find.text('Total Nilai Aset (Investasi)'), findsOneWidget);
 
       // Total terfilter menjadi Rp 32.000.000
       expect(find.textContaining('32.000.000'), findsWidgets);
-      expect(find.text('1 Aset'), findsOneWidget);
+      expect(find.text('Kategori: Investasi • 1 aset'), findsOneWidget);
 
       // Reset filter via chip Semua
-      final semuaChip = find.widgetWithText(ChoiceChip, 'Semua (5)');
+      final semuaChip = find.widgetWithText(ChoiceChip, 'Semua (6)');
+      await tester.scrollUntilVisible(
+        semuaChip,
+        -200,
+        scrollable: find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.right,
+        ),
+      );
+      await tester.pumpAndSettle();
       await tester.tap(semuaChip);
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       // Kembali ke semua aset
-      expect(
-        find.text('Total Nilai Aset (Semua Kategori)'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('86.500.000'), findsWidgets);
-      expect(find.text('5 Aset'), findsOneWidget);
+      expect(find.text('Total Nilai Aset (Semua Kategori)'), findsOneWidget);
+      expect(find.textContaining('87.000.000'), findsWidgets);
+      expect(find.text('Mencakup 6 kategori aset contoh'), findsOneWidget);
     });
 
-    testWidgets('aman dirender pada lebar 320 logical pixels tanpa overflow', (tester) async {
+    testWidgets('aman dirender pada lebar 320 logical pixels tanpa overflow', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(320, 700);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: AssetPage(),
-        ),
-      );
+      await tester.pumpWidget(const MaterialApp(home: AssetPage()));
       await tester.pump();
 
       expect(find.byType(AssetPage), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('aman dirender pada skala teks 1.5 tanpa crash', (tester) async {
+    testWidgets('aman dirender pada skala teks 1.5 tanpa crash', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: MediaQuery(
