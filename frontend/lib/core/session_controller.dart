@@ -9,7 +9,12 @@ import 'app_state.dart';
 class SessionController extends ChangeNotifier {
   SessionController(this.auth, {AppState? state})
     : state = state ?? AppState.instance {
+    this.state.addListener(_stateChanged);
     _subscribe();
+  }
+
+  void _stateChanged() {
+    if (!_disposed) notifyListeners();
   }
 
   final AuthGateway auth;
@@ -42,23 +47,23 @@ class SessionController extends ChangeNotifier {
 
   void _receive(int generation, SessionUser? next) {
     if (!_isCurrent(generation)) return;
-    if (next == null) {
-      state.clearSession();
-    } else {
-      state.beginSession(next.uid, next.email);
-    }
     user = next;
     checking = false;
     error = null;
+    if (next == null) {
+      state.clearSession();
+    } else {
+      unawaited(state.beginSession(next.uid, next.email));
+    }
     notifyListeners();
   }
 
   void _failed(int generation) {
     if (!_isCurrent(generation)) return;
-    state.clearSession();
     user = null;
     checking = false;
     error = 'Sesi belum dapat diperiksa. Periksa koneksi lalu coba lagi.';
+    state.clearSession();
     notifyListeners();
   }
 
@@ -91,6 +96,7 @@ class SessionController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _generation++;
+    state.removeListener(_stateChanged);
     _subscription?.cancel();
     super.dispose();
   }

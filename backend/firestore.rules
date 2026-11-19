@@ -1,6 +1,27 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function owns(uid) { return request.auth != null && request.auth.uid == uid; }
+    function validProfile(data) {
+      return data.keys().hasAll(['name', 'phone', 'address', 'city', 'job', 'monthlyIncome', 'darkMode', 'notifEnabled', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'phone', 'address', 'city', 'job', 'monthlyIncome', 'darkMode', 'notifEnabled', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 120
+        && !data.name.matches('\\s*')
+        && data.phone is string && data.phone.size() <= 30
+        && data.address is string && data.address.size() <= 500
+        && data.city is string && data.city.size() <= 120
+        && data.job is string && data.job.size() <= 120
+        && data.monthlyIncome is int && data.monthlyIncome >= 0 && data.monthlyIncome <= 9007199254740991
+        && data.darkMode is bool && data.notifEnabled is bool
+        && data.createdAt is timestamp && data.updatedAt == request.time;
+    }
+    match /users/{uid} {
+      allow get: if owns(uid);
+      allow create: if owns(uid) && validProfile(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if owns(uid) && validProfile(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
     match /{document=**} { allow read, write: if false; }
   }
 }

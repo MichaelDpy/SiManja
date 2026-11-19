@@ -14,6 +14,7 @@ import 'package:simanja/services/auth_service.dart';
 import 'package:simanja/widgets/session_scope.dart';
 
 import 'support/session_auth.dart';
+import 'support/memory_profiles.dart';
 
 class ProtectedHome extends StatelessWidget {
   const ProtectedHome({super.key});
@@ -79,7 +80,10 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
     await initializeDateFormatting('id_ID', null);
   });
-  setUp(() => AppState.instance.clearSession());
+  setUp(() {
+    AppState.instance.clearSession();
+    AppState.instance.useProfileRepository(MemoryProfiles());
+  });
 
   Future<void> cleanup(WidgetTester tester, SessionAuth auth) async {
     await tester.pumpWidget(const SizedBox());

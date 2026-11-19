@@ -68,10 +68,10 @@ void main() {
     () async {
       auth.emit(const SessionUser('A', 'a@example.com'));
       await tick();
-      state.phone = 'private-phone';
+      state.phone = '08123456789';
       state.monthlyIncome = 123;
-      state.setDarkMode(false);
-      state.setNotif(false);
+      await state.setDarkMode(false);
+      await state.setNotif(false);
       state.updatePhoto('private-photo');
       await state.addTransaction(transaction('private-A'));
       final revision = state.sessionRevision;

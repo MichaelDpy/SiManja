@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
 import 'mock_data.dart';
+import '../models/user_profile.dart';
+import '../repositories/profile_repository.dart';
 
 /// Global in-memory state untuk aplikasi SIMANJA.
 ///
@@ -18,23 +20,142 @@ import 'mock_data.dart';
 ///   kontrak Future tetap terpenuhi sehingga C6 bisa mengganti
 ///   implementasi tanpa mengubah call site.
 class AppState extends ChangeNotifier {
-  AppState._();
+  AppState._() : _allowLocalProfile = false;
   @visibleForTesting
-  AppState.forTesting();
+  AppState.forTesting({ProfileRepository? profiles})
+    : _profileRepository = profiles,
+      _allowLocalProfile = profiles == null;
   static final AppState instance = AppState._();
+
+  ProfileRepository? _profileRepository;
+  bool _allowLocalProfile;
+  UserProfile? _loadedProfile;
+  Future<void>? _profileLoad;
+  bool profileLoading = false;
+  bool profileSaving = false;
+  bool profileReady = false;
+  String? profileError;
+
+  bool get hasProfileRepository => _profileRepository != null;
+  void useProfileRepository(ProfileRepository repository) {
+    _profileRepository = repository;
+    _allowLocalProfile = false;
+  }
 
   String? sessionUid;
   int _sessionRevision = 0;
   int get sessionRevision => _sessionRevision;
 
-  void beginSession(String uid, String authEmail) {
+  Future<void> beginSession(String uid, String authEmail) {
     if (sessionUid != uid) {
       _clearUserData();
       sessionUid = uid;
       name = authEmail.isEmpty ? 'Pengguna' : authEmail.split('@').first;
     }
     email = authEmail;
+    if (!profileReady) return retryProfile();
     notifyListeners();
+    return Future.value();
+  }
+
+  Future<void> retryProfile() {
+    if (sessionUid == null) return Future.value();
+    if (profileLoading) return _profileLoad ?? Future.value();
+    final uid = sessionUid!;
+    final revision = _sessionRevision;
+    final repository = _profileRepository;
+    profileLoading = true;
+    profileError = null;
+    profileReady = false;
+    notifyListeners();
+    final request = _loadProfile(repository, uid, email, revision);
+    _profileLoad = request;
+    return request;
+  }
+
+  Future<void> _loadProfile(
+    ProfileRepository? repository,
+    String uid,
+    String authEmail,
+    int revision,
+  ) async {
+    try {
+      if (repository == null && !_allowLocalProfile) {
+        throw StateError('Repository profil belum siap.');
+      }
+      final profile = repository == null
+          ? _currentProfile()
+          : await repository.loadOrCreate(uid, authEmail);
+      profile.toMap();
+      if (revision != _sessionRevision) return;
+      _applyProfile(profile);
+      _loadedProfile = profile;
+      profileReady = true;
+    } catch (error) {
+      if (revision == _sessionRevision) {
+        profileError = error is FormatException || error is ArgumentError
+            ? 'Data profil tidak valid. Periksa data akun sebelum mencoba lagi.'
+            : 'Profil belum dapat dimuat. Periksa koneksi dan coba lagi.';
+      }
+    } finally {
+      if (revision == _sessionRevision) {
+        profileLoading = false;
+        _profileLoad = null;
+        notifyListeners();
+      }
+    }
+  }
+
+  UserProfile _currentProfile() => UserProfile(
+    name: name,
+    phone: phone,
+    address: address,
+    city: city,
+    job: job,
+    monthlyIncome: monthlyIncome,
+    darkMode: darkMode,
+    notifEnabled: notifEnabled,
+  );
+
+  void _applyProfile(UserProfile profile) {
+    name = profile.name;
+    phone = profile.phone;
+    address = profile.address;
+    city = profile.city;
+    job = profile.job;
+    monthlyIncome = profile.monthlyIncome;
+    darkMode = profile.darkMode;
+    notifEnabled = profile.notifEnabled;
+  }
+
+  Future<void> _saveProfile(UserProfile candidate) async {
+    final profile = UserProfile.fromMap(candidate.toMap());
+    if (!profileReady || (sessionUid == null && !_allowLocalProfile)) {
+      throw StateError('Profil belum siap.');
+    }
+    if (profileSaving) throw StateError('Penyimpanan profil masih berjalan.');
+    final repository = _profileRepository;
+    if (repository == null && !_allowLocalProfile) {
+      throw StateError('Repository profil belum siap.');
+    }
+    final uid = sessionUid;
+    final revision = _sessionRevision;
+    final previous = _loadedProfile ?? _currentProfile();
+    profileSaving = true;
+    notifyListeners();
+    try {
+      if (repository != null) {
+        await repository.save(uid!, profile, previous: previous);
+      }
+      if (revision != _sessionRevision) throw StateError('Sesi telah berubah.');
+      _loadedProfile = profile;
+      _applyProfile(profile);
+    } finally {
+      if (revision == _sessionRevision) {
+        profileSaving = false;
+        notifyListeners();
+      }
+    }
   }
 
   /// Logout tidak memuat fixture. Tema tetap preferensi perangkat pada tahap ini.
@@ -58,6 +179,12 @@ class AppState extends ChangeNotifier {
     _transactions = [];
     transactionsLoading = false;
     transactionsError = null;
+    _loadedProfile = null;
+    _profileLoad = null;
+    profileLoading = false;
+    profileSaving = false;
+    profileReady = false;
+    profileError = null;
   }
 
   // ── Profil User ────────────────────────────────────────────────────────
@@ -100,7 +227,7 @@ class AppState extends ChangeNotifier {
 
   // ── Profil actions ─────────────────────────────────────────────────────
 
-  void updateProfile({
+  Future<void> updateProfile({
     required String newName,
     required String newEmail,
     required String newPhone,
@@ -108,15 +235,20 @@ class AppState extends ChangeNotifier {
     required String newCity,
     required String newJob,
     required double newIncome,
-  }) {
-    name = newName;
-    email = newEmail;
-    phone = newPhone;
-    address = newAddress;
-    city = newCity;
-    job = newJob;
-    monthlyIncome = newIncome;
-    notifyListeners();
+  }) async {
+    if (newEmail.trim() != email) {
+      throw ArgumentError('Email identitas tidak dapat diubah dari profil.');
+    }
+    await _saveProfile(
+      _currentProfile().copyWith(
+        name: newName,
+        phone: newPhone,
+        address: newAddress,
+        city: newCity,
+        job: newJob,
+        monthlyIncome: newIncome,
+      ),
+    );
   }
 
   void updatePhoto(String path) {
@@ -124,15 +256,11 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setNotif(bool val) {
-    notifEnabled = val;
-    notifyListeners();
-  }
+  Future<void> setNotif(bool val) =>
+      _saveProfile(_currentProfile().copyWith(notifEnabled: val));
 
-  void setDarkMode(bool val) {
-    darkMode = val;
-    notifyListeners();
-  }
+  Future<void> setDarkMode(bool val) =>
+      _saveProfile(_currentProfile().copyWith(darkMode: val));
 
   // ── Transaksi actions ──────────────────────────────────────────────────
 
@@ -212,6 +340,9 @@ class AppState extends ChangeNotifier {
     transactionsError = null;
     _transactions = List.from(MockData.transactions);
     _sortTransactions();
+    _allowLocalProfile = true;
+    profileReady = true;
+    _loadedProfile = _currentProfile();
     notifyListeners();
   }
 
@@ -222,5 +353,11 @@ class AppState extends ChangeNotifier {
       final d = b.date.compareTo(a.date);
       return d != 0 ? d : a.id.compareTo(b.id);
     });
+  }
+
+  @override
+  void dispose() {
+    _sessionRevision++;
+    super.dispose();
   }
 }

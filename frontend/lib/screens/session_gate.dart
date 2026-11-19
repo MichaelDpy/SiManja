@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../core/app_state.dart';
 import '../core/session_controller.dart';
+import '../core/firebase_bootstrap.dart';
+import '../repositories/profile_repository.dart';
 import '../services/auth_service.dart';
 import '../widgets/session_scope.dart';
 import 'intro_page.dart';
@@ -15,11 +17,13 @@ class SessionGate extends StatefulWidget {
     this.state,
     this.showIntroWhenSignedOut = false,
     this.homeBuilder,
+    this.profiles,
   });
   final AuthGateway? auth;
   final AppState? state;
   final bool showIntroWhenSignedOut;
   final WidgetBuilder? homeBuilder;
+  final ProfileRepository? profiles;
 
   @override
   State<SessionGate> createState() => _SessionGateState();
@@ -34,9 +38,17 @@ class _SessionGateState extends State<SessionGate> {
   void initState() {
     super.initState();
     try {
+      final state = widget.state ?? AppState.instance;
+      if (widget.profiles != null) {
+        state.useProfileRepository(widget.profiles!);
+      } else if (!state.hasProfileRepository) {
+        state.useProfileRepository(
+          FirestoreProfileRepository.lazy(() => FirebaseBootstrap.firestore),
+        );
+      }
       _session = SessionController(
         widget.auth ?? AuthService.instance,
-        state: widget.state,
+        state: state,
       )..addListener(_changed);
     } catch (_) {
       // Route langsung sebelum bootstrap tidak boleh membuka Home.
@@ -140,6 +152,56 @@ class _SessionGateState extends State<SessionGate> {
       return widget.showIntroWhenSignedOut
           ? const IntroPage()
           : LoginPage(auth: session.auth);
+    }
+    final state = session.state;
+    if (state.profileLoading) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                const Text('Memuat profil…'),
+                TextButton(
+                  onPressed: session.signingOut ? null : _signOut,
+                  child: const Text('Keluar'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    if (state.profileError != null || !state.profileReady) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    state.profileError ?? 'Profil belum siap.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: state.retryProfile,
+                    child: const Text('Muat ulang profil'),
+                  ),
+                  TextButton(
+                    onPressed: session.signingOut ? null : _signOut,
+                    child: const Text('Keluar'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
     }
     return SessionScope(
       controller: session,

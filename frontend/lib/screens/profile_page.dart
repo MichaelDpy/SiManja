@@ -7,30 +7,9 @@ import 'package:image_picker/image_picker.dart';
 
 import '../core/app_state.dart';
 import '../core/theme.dart';
+import '../models/user_profile.dart';
 import '../services/auth_service.dart';
 import '../widgets/session_scope.dart';
-
-// ── Validator nomor telepon Indonesia ────────────────────────────────────
-// Menerima format umum: 08xx, +628xx, 628xx — dengan/tanpa spasi/strip.
-// Tidak terlalu ketat: nomor 10–15 digit setelah strip spasi/+/- sudah cukup.
-bool _isValidPhone(String v) {
-  final digits = v.replaceAll(RegExp(r'[\s\-+()]'), '');
-  if (digits.length < 9 || digits.length > 15) return false;
-  if (!RegExp(r'^\d+$').hasMatch(digits)) return false;
-  return true;
-}
-
-// ── Parser nominal rupiah (sama dengan transaction_page) ─────────────────
-double? _parseIncome(String raw) {
-  final cleaned = raw.trim().replaceAll('.', '').replaceAll(',', '');
-  if (cleaned.isEmpty) return null;
-  final v = double.tryParse(cleaned);
-  if (v == null || !v.isFinite || v < 0) return null;
-  if (v != v.roundToDouble()) return null;
-  return v;
-}
-
-// ── ProfilePage ───────────────────────────────────────────────────────────
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -174,12 +153,12 @@ class _ProfilePageState extends State<ProfilePage> {
   // ── Simpan ────────────────────────────────────────────────────────────
 
   Future<void> _save() async {
+    if (_isSaving || AppState.instance.profileSaving) return;
     setState(() => _saveError = null);
     if (!_formKey.currentState!.validate()) return;
-    if (_isSaving) return; // guard double-submit
 
     // Validasi pendapatan
-    final income = _parseIncome(_pendapatanCtrl.text);
+    final income = UserProfile.parseIncome(_pendapatanCtrl.text);
     if (_pendapatanCtrl.text.trim().isNotEmpty && income == null) {
       setState(
         () => _saveError =
@@ -190,8 +169,8 @@ class _ProfilePageState extends State<ProfilePage> {
 
     setState(() => _isSaving = true);
     try {
-      // Penyimpanan lokal — sinkron di AppState
-      AppState.instance.updateProfile(
+      // Tunggu konfirmasi write melalui AppState sebelum menampilkan sukses.
+      await AppState.instance.updateProfile(
         newName: _namaCtrl.text.trim(),
         newEmail: _emailCtrl.text.trim(),
         newPhone: _waCtrl.text.trim(),
@@ -205,8 +184,7 @@ class _ProfilePageState extends State<ProfilePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Data tersimpan secara lokal di perangkat ini.\n'
-            'Sinkronisasi cloud akan aktif setelah integrasi Firebase selesai.',
+            'Profil berhasil disimpan ke akun.',
             style: GoogleFonts.lato(fontSize: 12, color: AppColors.bgDark),
           ),
           backgroundColor: AppColors.teal,
@@ -219,13 +197,29 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _saveError = 'Gagal menyimpan: $e');
+      setState(
+        () => _saveError = e is ArgumentError
+            ? e.message.toString()
+            : 'Profil belum dapat disimpan. Periksa koneksi dan coba lagi.',
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
   }
 
   // ── Logout ────────────────────────────────────────────────────────────
+
+  Future<void> _savePreference(Future<void> Function() save) async {
+    if (AppState.instance.profileSaving) return;
+    setState(() => _saveError = null);
+    try {
+      await save();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _saveError = 'Preferensi gagal disimpan. Coba lagi.');
+      }
+    }
+  }
 
   Future<void> _logout() async {
     if (_isLoggingOut) return;
@@ -236,7 +230,7 @@ class _ProfilePageState extends State<ProfilePage> {
         builder: (ctx) => AlertDialog(
           title: const Text('Keluar dari Akun?'),
           content: const Text(
-            'Sesi Firebase akan diakhiri dan data lokal sesi ini akan dibersihkan.',
+            'Profil yang sudah tersimpan tetap ada pada akun. Perubahan yang masih diproses belum terjamin tersimpan. Foto dan data lokal sesi ini akan dibersihkan.',
           ),
           actions: [
             TextButton(
@@ -340,25 +334,32 @@ class _ProfilePageState extends State<ProfilePage> {
               ],
 
               // ── Informasi Pribadi ──────────────────────────────────
+              if (state.profileSaving) ...[
+                const Text(
+                  'Menyimpan perubahan, menunggu konfirmasi server...',
+                ),
+                const SizedBox(height: 12),
+              ],
               _SectionLabel(label: 'Informasi Pribadi'),
               const SizedBox(height: 12),
 
               _AppFormField(
+                key: const Key('profile-name'),
                 controller: _namaCtrl,
                 label: 'Nama Lengkap',
                 icon: Icons.person_outline,
                 textCapitalization: TextCapitalization.words,
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) return 'Nama wajib diisi';
-                  if (v.trim().length < 2) return 'Nama terlalu pendek';
-                  return null;
-                },
+                validator: UserProfile.validateName,
               ),
               const SizedBox(height: 14),
 
               _AppFormField(
+                key: const Key('profile-email'),
                 controller: _emailCtrl,
-                label: 'Email',
+                label: 'Email akun',
+                readOnly: true,
+                helperText:
+                    'Email identitas tidak dapat diubah dari halaman ini.',
                 icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) {
@@ -374,25 +375,22 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 14),
 
               _AppFormField(
+                key: const Key('profile-phone'),
                 controller: _waCtrl,
-                label: 'Nomor Telepon / WhatsApp',
+                label: 'Nomor Telepon / WhatsApp (opsional)',
                 icon: Icons.phone_outlined,
                 keyboardType: TextInputType.phone,
                 hint: '+62 8xx-xxxx-xxxx atau 08xx-xxxx-xxxx',
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return 'Nomor telepon wajib diisi';
-                  }
-                  if (!_isValidPhone(v.trim())) {
-                    return 'Format nomor telepon tidak valid';
-                  }
-                  return null;
-                },
+                validator: UserProfile.validatePhone,
               ),
               const SizedBox(height: 14),
 
               _AppFormField(
+                key: const Key('profile-address'),
                 controller: _alamatCtrl,
+                validator: (v) => (v?.trim().length ?? 0) > 500
+                    ? 'Alamat maksimal 500 karakter'
+                    : null,
                 label: 'Alamat',
                 icon: Icons.location_on_outlined,
                 maxLines: 2,
@@ -401,7 +399,11 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 14),
 
               _AppFormField(
+                key: const Key('profile-city'),
                 controller: _kotaCtrl,
+                validator: (v) => (v?.trim().length ?? 0) > 120
+                    ? 'Kota maksimal 120 karakter'
+                    : null,
                 label: 'Kota / Kabupaten',
                 icon: Icons.location_city_outlined,
                 textCapitalization: TextCapitalization.words,
@@ -414,7 +416,11 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 12),
 
               _AppFormField(
+                key: const Key('profile-job'),
                 controller: _pekerjaanCtrl,
+                validator: (v) => (v?.trim().length ?? 0) > 120
+                    ? 'Pekerjaan maksimal 120 karakter'
+                    : null,
                 label: 'Pekerjaan',
                 icon: Icons.work_outline,
                 textCapitalization: TextCapitalization.words,
@@ -422,16 +428,17 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 14),
 
               _AppFormField(
+                key: const Key('profile-income'),
                 controller: _pendapatanCtrl,
                 label: 'Pendapatan Bulanan (Rp)',
                 icon: Icons.payments_outlined,
                 keyboardType: TextInputType.number,
                 hint: 'Contoh: 5000000',
-                helperText: 'Gunakan angka tanpa separator, mis. 5000000',
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                helperText:
+                    'Rupiah bulat: 5000000 atau 5.000.000. Kosong berarti 0.',
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return null; // opsional
-                  final val = _parseIncome(v);
+                  final val = UserProfile.parseIncome(v);
                   if (val == null) {
                     return 'Pendapatan harus berupa angka bulat non-negatif';
                   }
@@ -458,7 +465,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       label: 'Notifikasi Transaksi',
                       subtitle: 'Pengingat transaksi dalam aplikasi',
                       value: AppState.instance.notifEnabled,
-                      onChanged: (v) => AppState.instance.setNotif(v),
+                      onChanged: state.profileSaving
+                          ? null
+                          : (v) => _savePreference(() => state.setNotif(v)),
                     ),
                     Divider(color: Theme.of(context).dividerColor, height: 1),
                     _SwitchRow(
@@ -466,7 +475,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       label: 'Mode Gelap',
                       subtitle: 'Ubah tampilan tema aplikasi',
                       value: AppState.instance.darkMode,
-                      onChanged: (v) => AppState.instance.setDarkMode(v),
+                      onChanged: state.profileSaving
+                          ? null
+                          : (v) => _savePreference(() => state.setDarkMode(v)),
                     ),
                   ],
                 ),
@@ -478,7 +489,8 @@ class _ProfilePageState extends State<ProfilePage> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isSaving ? null : _save,
+                  key: const Key('profile-save'),
+                  onPressed: _isSaving || state.profileSaving ? null : _save,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -764,11 +776,12 @@ class _AppFormField extends StatelessWidget {
   final int? maxLines;
   final String? hint;
   final String? helperText;
+  final bool readOnly;
   final String? Function(String?)? validator;
   final TextCapitalization textCapitalization;
-  final List<TextInputFormatter>? inputFormatters;
 
   const _AppFormField({
+    super.key,
     required this.controller,
     required this.label,
     required this.icon,
@@ -776,19 +789,20 @@ class _AppFormField extends StatelessWidget {
     this.maxLines = 1,
     this.hint,
     this.helperText,
+    this.readOnly = false,
     this.validator,
     this.textCapitalization = TextCapitalization.none,
-    this.inputFormatters,
   });
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      enabled: !AppState.instance.profileSaving,
+      readOnly: readOnly,
       keyboardType: keyboardType,
       maxLines: maxLines,
       textCapitalization: textCapitalization,
-      inputFormatters: inputFormatters,
       validator: validator,
       style: GoogleFonts.lato(fontSize: 14),
       decoration: InputDecoration(
@@ -809,7 +823,7 @@ class _SwitchRow extends StatelessWidget {
   final String label;
   final String? subtitle;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   const _SwitchRow({
     required this.icon,
