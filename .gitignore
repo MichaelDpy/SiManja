@@ -126,3 +126,17 @@ backend/node_modules/
 backend/.firebase/
 backend/functions/node_modules/
 backend/functions/lib/
+backend/.cache/
+backend/*-debug.log
+frontend/config/firebase.local.json
+
+# Log hasil pemeriksaan dan cache Kotlin lokal
+*.log.*
+.kotlin/
+
+# Catatan kerja/panduan lokal tidak disertakan dalam repository
+/00-panduan-tim.md
+/docs/rencana-commit/
+/docs/backend-tahap-1.md
+/docs/presentasi.md
+/backend/README.md

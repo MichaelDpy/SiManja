@@ -5,7 +5,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/theme.dart';
 import 'core/app_state.dart';
-import 'screens/splash_page.dart';
+import 'screens/bootstrap_page.dart';
 import 'screens/intro_page.dart';
 import 'screens/login_page.dart';
 import 'screens/main_shell.dart';
@@ -94,7 +94,7 @@ class _SimanjaAppState extends State<SimanjaApp> {
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       initialRoute: widget.initialRoute,
       routes: {
-        '/': (ctx) => const SplashPage(),
+        '/': (ctx) => const BootstrapPage(),
         '/intro': (ctx) => const IntroPage(),
         '/login': (ctx) => const LoginPage(),
         '/home': (ctx) => const MainShell(),
@@ -104,10 +104,12 @@ class _SimanjaAppState extends State<SimanjaApp> {
         return AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle(
             statusBarColor: Colors.transparent,
-            statusBarIconBrightness:
-                isDarkMode ? Brightness.light : Brightness.dark,
-            statusBarBrightness:
-                isDarkMode ? Brightness.dark : Brightness.light,
+            statusBarIconBrightness: isDarkMode
+                ? Brightness.light
+                : Brightness.dark,
+            statusBarBrightness: isDarkMode
+                ? Brightness.dark
+                : Brightness.light,
           ),
           child: child ?? const SizedBox.shrink(),
         );
