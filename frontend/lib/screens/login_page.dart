@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/theme.dart';
-import '../core/mock_data.dart';
+import '../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.auth});
+  final AuthGateway? auth;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -28,29 +29,23 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-
+    if (_isLoading || !_formKey.currentState!.validate()) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
     });
-
-    // Simulasi delay network
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    final email = _emailCtrl.text.trim().toLowerCase();
-    final password = _passwordCtrl.text;
-
-    // Validasi terhadap akun dummy
-    if (email == MockData.dummyUser.email &&
-        password == MockData.dummyUser.password) {
-      if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/home');
-    } else {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Email atau password salah. Silakan coba lagi.';
-      });
+    try {
+      await (widget.auth ?? AuthService.instance).signIn(
+        _emailCtrl.text,
+        _passwordCtrl.text,
+      );
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+      }
+    } catch (error) {
+      if (mounted) setState(() => _errorMessage = authErrorMessage(error));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -129,6 +124,9 @@ class _LoginPageState extends State<LoginPage> {
                     children: [
                       // Email field
                       TextFormField(
+                        key: const Key('login-email'),
+                        enabled: !_isLoading,
+                        autofillHints: const [AutofillHints.email],
                         controller: _emailCtrl,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
@@ -141,21 +139,16 @@ class _LoginPageState extends State<LoginPage> {
                           hintText: 'contoh@email.com',
                           prefixIcon: Icon(Icons.email_outlined),
                         ),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return 'Email wajib diisi';
-                          }
-                          if (!v.contains('@')) {
-                            return 'Format email tidak valid';
-                          }
-                          return null;
-                        },
+                        validator: validateEmail,
                       ),
 
                       const SizedBox(height: 16),
 
                       // Password field
                       TextFormField(
+                        key: const Key('login-password'),
+                        enabled: !_isLoading,
+                        autofillHints: const [AutofillHints.password],
                         controller: _passwordCtrl,
                         obscureText: _obscurePassword,
                         textInputAction: TextInputAction.done,
@@ -169,24 +162,27 @@ class _LoginPageState extends State<LoginPage> {
                           hintText: '••••••••',
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Tampilkan password'
+                                : 'Sembunyikan password',
                             icon: Icon(
                               _obscurePassword
                                   ? Icons.visibility_outlined
                                   : Icons.visibility_off_outlined,
                             ),
-                            onPressed: () {
-                              setState(
-                                () => _obscurePassword = !_obscurePassword,
-                              );
-                            },
+                            onPressed: _isLoading
+                                ? null
+                                : () {
+                                    setState(
+                                      () =>
+                                          _obscurePassword = !_obscurePassword,
+                                    );
+                                  },
                           ),
                         ),
                         validator: (v) {
                           if (v == null || v.isEmpty) {
                             return 'Password wajib diisi';
-                          }
-                          if (v.length < 4) {
-                            return 'Password minimal 4 karakter';
                           }
                           return null;
                         },
@@ -236,9 +232,28 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 24),
 
                 // ── Tombol Login ──────────────────────────────────────────
+                Wrap(
+                  spacing: 12,
+                  children: [
+                    TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () =>
+                                Navigator.pushNamed(context, '/reset-password'),
+                      child: const Text('Lupa password?'),
+                    ),
+                    TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () => Navigator.pushNamed(context, '/register'),
+                      child: const Text('Buat akun'),
+                    ),
+                  ],
+                ),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
+                    key: const Key('login-submit'),
                     onPressed: _isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.teal,

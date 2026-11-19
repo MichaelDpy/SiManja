@@ -6,6 +6,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'core/theme.dart';
 import 'core/app_state.dart';
 import 'screens/bootstrap_page.dart';
+import 'screens/auth_form_page.dart';
+import 'services/auth_service.dart';
 import 'screens/intro_page.dart';
 import 'screens/login_page.dart';
 import 'screens/main_shell.dart';
@@ -42,8 +44,9 @@ void main() async {
 
 class SimanjaApp extends StatefulWidget {
   final String initialRoute;
+  final AuthGateway? auth;
 
-  const SimanjaApp({super.key, this.initialRoute = '/'});
+  const SimanjaApp({super.key, this.initialRoute = '/', this.auth});
 
   @override
   State<SimanjaApp> createState() => _SimanjaAppState();
@@ -96,8 +99,11 @@ class _SimanjaAppState extends State<SimanjaApp> {
       routes: {
         '/': (ctx) => const BootstrapPage(),
         '/intro': (ctx) => const IntroPage(),
-        '/login': (ctx) => const LoginPage(),
+        '/login': (ctx) => LoginPage(auth: widget.auth),
         '/home': (ctx) => const MainShell(),
+        '/register': (ctx) => AuthFormPage(register: true, auth: widget.auth),
+        '/reset-password': (ctx) =>
+            AuthFormPage(register: false, auth: widget.auth),
       },
       builder: (context, child) {
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
