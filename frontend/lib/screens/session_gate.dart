@@ -1,0 +1,154 @@
+import 'package:flutter/material.dart';
+
+import '../core/app_state.dart';
+import '../core/session_controller.dart';
+import '../services/auth_service.dart';
+import '../widgets/session_scope.dart';
+import 'intro_page.dart';
+import 'login_page.dart';
+import 'main_shell.dart';
+
+class SessionGate extends StatefulWidget {
+  const SessionGate({
+    super.key,
+    this.auth,
+    this.state,
+    this.showIntroWhenSignedOut = false,
+    this.homeBuilder,
+  });
+  final AuthGateway? auth;
+  final AppState? state;
+  final bool showIntroWhenSignedOut;
+  final WidgetBuilder? homeBuilder;
+
+  @override
+  State<SessionGate> createState() => _SessionGateState();
+}
+
+class _SessionGateState extends State<SessionGate> {
+  SessionController? _session;
+  String? _lastUid;
+  bool _navigationQueued = false;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      _session = SessionController(
+        widget.auth ?? AuthService.instance,
+        state: widget.state,
+      )..addListener(_changed);
+    } catch (_) {
+      // Route langsung sebelum bootstrap tidak boleh membuka Home.
+    }
+  }
+
+  void _changed() {
+    if (!mounted) return;
+    final nextUid = _session!.user?.uid;
+    if (_lastUid != null && _lastUid != nextUid && !_navigationQueued) {
+      _navigationQueued = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _navigationQueued = false;
+        // Tutup juga dialog/form yang masih membawa data UID sebelumnya.
+        final target = _session!.user == null ? '/login' : '/home';
+        Navigator.of(context).pushNamedAndRemoveUntil(target, (_) => false);
+      });
+    }
+    _lastUid = nextUid;
+    setState(() {});
+  }
+
+  Future<void> _signOut() async {
+    try {
+      await _session!.signOut();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Gagal keluar. Silakan coba lagi.')),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _session?.removeListener(_changed);
+    _session?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = _session;
+    if (session == null) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: TextButton(
+              onPressed: () =>
+                  Navigator.of(context)
+                      .pushNamedAndRemoveUntil('/', (_) => false),
+              child: const Text('Siapkan Firebase terlebih dahulu'),
+            ),
+          ),
+        ),
+      );
+    }
+    if (session.checking) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Memeriksa sesi…'),
+            ],
+          ),
+        ),
+      );
+    }
+    if (session.error != null) {
+      return Scaffold(
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(session.error!, textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: session.retry,
+                    child: const Text('Coba lagi'),
+                  ),
+                  TextButton(
+                    onPressed: session.signingOut ? null : _signOut,
+                    child: const Text('Keluar'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    if (session.user == null) {
+      return widget.showIntroWhenSignedOut
+          ? const IntroPage()
+          : LoginPage(auth: session.auth);
+    }
+    return SessionScope(
+      controller: session,
+      child: KeyedSubtree(
+        key: ValueKey(session.user!.uid),
+        child: widget.homeBuilder == null
+            ? const MainShell()
+            : Builder(builder: widget.homeBuilder!),
+      ),
+    );
+  }
+}

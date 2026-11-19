@@ -15,13 +15,10 @@ import 'package:google_fonts/google_fonts.dart';
 ///  900 ms → indikator loading muncul dengan fade (400 ms)
 /// 2800 ms → navigasi ke /intro
 ///
-/// Handoff untuk Anggota 3 (C3):
-/// - Ganti _navigateNext() untuk memeriksa status sesi Firebase Auth.
-///   Jika sudah login → pushReplacementNamed('/home').
-///   Jika belum login → pushReplacementNamed('/intro') (alur sekarang).
-/// - Jangan ubah durasi timer atau nama rute tanpa koordinasi A.
+/// Bootstrap mengarahkan ke pemeriksaan sesi setelah animasi selesai.
 class SplashPage extends StatefulWidget {
-  const SplashPage({super.key});
+  const SplashPage({super.key, this.nextRoute = '/intro'});
+  final String nextRoute;
 
   @override
   State<SplashPage> createState() => _SplashPageState();
@@ -103,11 +100,11 @@ class _SplashPageState extends State<SplashPage>
 
   /// Navigasi setelah splash selesai.
   ///
-  /// Alur sekarang: → /intro
-  /// C3: periksa sesi Firebase Auth di sini sebelum navigasi.
+  /// Tujuan dipilih bootstrap: → /intro
+  /// Route Home selalu melewati auth gate.
   void _navigateNext() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/intro');
+    Navigator.of(context).pushReplacementNamed(widget.nextRoute);
   }
 
   @override
@@ -187,8 +184,8 @@ class _SplashPageState extends State<SplashPage>
                                   strokeWidth: 2.2,
                                   valueColor:
                                       const AlwaysStoppedAnimation<Color>(
-                                    Color(0xFF2DD4BF),
-                                  ),
+                                        Color(0xFF2DD4BF),
+                                      ),
                                   backgroundColor: const Color(0xFF2DD4BF)
                                       .withValues(alpha: 0.15),
                                 ),

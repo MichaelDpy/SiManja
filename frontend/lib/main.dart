@@ -10,20 +10,10 @@ import 'screens/auth_form_page.dart';
 import 'services/auth_service.dart';
 import 'screens/intro_page.dart';
 import 'screens/login_page.dart';
-import 'screens/main_shell.dart';
+import 'screens/session_gate.dart';
 
-/// Entry point aplikasi SIMANJA.
-///
-/// Alur saat ini (tahap frontend lokal):
-///   Splash → Intro → Login → Home
-///
-/// Handoff untuk Anggota 3 (C1/C3):
-/// - C1: tambahkan inisialisasi Firebase di sini (Firebase.initializeApp)
-///       sebelum runApp, setelah FlutterNativeSplash.preserve.
-/// - C3: tambahkan auth gate di sini atau di SplashPage._navigateNext —
-///       jika user sudah login, lewati Intro+Login langsung ke Home.
-///       Gunakan rute '/home' yang sudah terdaftar; jangan ganti nama rute.
-/// - Jangan ubah initialRoute '/' atau nama rute lain tanpa koordinasi A.
+/// Bootstrap Firebase -> splash -> pemeriksaan sesi.
+/// Sesi aktif menuju Home; pengguna tanpa sesi melewati Intro dan Login.
 void main() async {
   final binding = WidgetsFlutterBinding.ensureInitialized();
   FlutterNativeSplash.preserve(widgetsBinding: binding);
@@ -84,6 +74,22 @@ class _SimanjaAppState extends State<SimanjaApp> {
     );
   }
 
+  Route<void> _route(RouteSettings settings) {
+    final page = switch (settings.name) {
+      '/intro' => const IntroPage(),
+      '/login' => LoginPage(auth: widget.auth),
+      '/home' => SessionGate(auth: widget.auth),
+      '/session' => SessionGate(
+        auth: widget.auth,
+        showIntroWhenSignedOut: true,
+      ),
+      '/register' => AuthFormPage(register: true, auth: widget.auth),
+      '/reset-password' => AuthFormPage(register: false, auth: widget.auth),
+      _ => const BootstrapPage(),
+    };
+    return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = AppState.instance.darkMode;
@@ -96,15 +102,8 @@ class _SimanjaAppState extends State<SimanjaApp> {
       darkTheme: AppTheme.dark,
       themeMode: isDark ? ThemeMode.dark : ThemeMode.light,
       initialRoute: widget.initialRoute,
-      routes: {
-        '/': (ctx) => const BootstrapPage(),
-        '/intro': (ctx) => const IntroPage(),
-        '/login': (ctx) => LoginPage(auth: widget.auth),
-        '/home': (ctx) => const MainShell(),
-        '/register': (ctx) => AuthFormPage(register: true, auth: widget.auth),
-        '/reset-password': (ctx) =>
-            AuthFormPage(register: false, auth: widget.auth),
-      },
+      onGenerateInitialRoutes: (route) => [_route(RouteSettings(name: route))],
+      onGenerateRoute: _route,
       builder: (context, child) {
         final isDarkMode = Theme.of(context).brightness == Brightness.dark;
         return AnnotatedRegion<SystemUiOverlayStyle>(

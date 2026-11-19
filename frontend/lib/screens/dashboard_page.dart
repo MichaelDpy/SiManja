@@ -20,10 +20,7 @@ class _DashboardPeriod {
 
   const _DashboardPeriod({this.year, this.month, required this.label});
 
-  const _DashboardPeriod.all()
-      : year = null,
-        month = null,
-        label = 'Semua';
+  const _DashboardPeriod.all() : year = null, month = null, label = 'Semua';
 
   bool get isAll => year == null;
 
@@ -59,12 +56,9 @@ class InAppNotificationItem {
   }) {
     if (transactions.isEmpty) return const [];
 
-    final fmt = currencyFormatter ??
-        NumberFormat.currency(
-          locale: 'id_ID',
-          symbol: 'Rp ',
-          decimalDigits: 0,
-        );
+    final fmt =
+        currencyFormatter ??
+        NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
     final list = <InAppNotificationItem>[];
     final totalIncome = FinanceSummary.totalIncome(transactions);
@@ -75,8 +69,7 @@ class InAppNotificationItem {
 
     // 1. Transaksi terakhir tercatat
     final latest = transactions.first;
-    final formattedDate =
-        DateFormat('d MMM yyyy', 'id_ID').format(latest.date);
+    final formattedDate = DateFormat('d MMM yyyy', 'id_ID').format(latest.date);
     list.add(
       InAppNotificationItem(
         icon: latest.isIncome ? Icons.arrow_downward : Icons.arrow_upward,
@@ -519,8 +512,10 @@ class _DashboardPageState extends State<DashboardPage> {
     final savingsRate = FinanceSummary.savingsRate(filteredTx);
 
     // Perhitungan total dan persentase aset nyata dari nilai
-    final totalAssetValue =
-        MockData.assets.fold<double>(0.0, (sum, a) => sum + a.value);
+    final totalAssetValue = MockData.assets.fold<double>(
+      0.0,
+      (sum, a) => sum + a.value,
+    );
 
     // Transaksi terbaru dibatasi maksimal 5
     final recentTx = filteredTx.take(5).toList();
@@ -621,8 +616,9 @@ class _DashboardPageState extends State<DashboardPage> {
                           height: 18,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(AppColors.teal),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              AppColors.teal,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -703,19 +699,19 @@ class _DashboardPageState extends State<DashboardPage> {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     itemCount: periods.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
                     itemBuilder: (ctx, i) {
                       final p = periods[i];
                       final isSelected = p == _selectedPeriod;
                       return ChoiceChip(
                         label: Text(p.label),
                         selected: isSelected,
-                        onSelected: (_) =>
-                            setState(() => _selectedPeriod = p),
+                        onSelected: (_) => setState(() => _selectedPeriod = p),
                         labelStyle: GoogleFonts.lato(
                           fontSize: 11,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
+                          fontWeight: isSelected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
                           color: isSelected ? Colors.white : cs.onSurface,
                         ),
                         selectedColor: AppColors.teal,
@@ -756,10 +752,13 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        spacing: 12,
+                        runSpacing: 8,
                         children: [
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(
                                 Icons.swap_horiz,
@@ -812,15 +811,15 @@ class _DashboardPageState extends State<DashboardPage> {
                           netCashFlow > 0
                               ? '+${_fmt.format(netCashFlow)}'
                               : (netCashFlow < 0
-                                  ? '-${_fmt.format(netCashFlow.abs())}'
-                                  : _fmt.format(0)),
+                                    ? '-${_fmt.format(netCashFlow.abs())}'
+                                    : _fmt.format(0)),
                           style: tt.headlineMedium?.copyWith(
                             fontWeight: FontWeight.w800,
                             color: netCashFlow > 0
                                 ? AppColors.income
                                 : (netCashFlow < 0
-                                    ? AppColors.expense
-                                    : cs.onSurface),
+                                      ? AppColors.expense
+                                      : cs.onSurface),
                           ),
                         ),
                       ),
@@ -889,10 +888,13 @@ class _DashboardPageState extends State<DashboardPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            spacing: 12,
+                            runSpacing: 8,
                             children: [
                               Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
                                     Icons.donut_large,
@@ -914,8 +916,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                   vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: cs.onSurfaceVariant
-                                      .withValues(alpha: 0.12),
+                                  color: cs.onSurfaceVariant.withValues(
+                                    alpha: 0.12,
+                                  ),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
@@ -997,7 +1000,9 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
                           Text(
                             'Distribusi Aset',
@@ -1012,8 +1017,9 @@ class _DashboardPageState extends State<DashboardPage> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: cs.onSurfaceVariant
-                                  .withValues(alpha: 0.12),
+                              color: cs.onSurfaceVariant.withValues(
+                                alpha: 0.12,
+                              ),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -1025,7 +1031,6 @@ class _DashboardPageState extends State<DashboardPage> {
                               ),
                             ),
                           ),
-                          const Spacer(),
                           Text(
                             '${MockData.assets.length} Aset',
                             style: tt.bodySmall?.copyWith(
@@ -1057,12 +1062,15 @@ class _DashboardPageState extends State<DashboardPage> {
                                       _touchedIndex = -1;
                                       return;
                                     }
-                                    _touchedIndex = response.touchedSection!
+                                    _touchedIndex = response
+                                        .touchedSection!
                                         .touchedSectionIndex;
                                   });
                                 },
                               ),
-                              sections: MockData.assets.asMap().entries.map((e) {
+                              sections: MockData.assets.asMap().entries.map((
+                                e,
+                              ) {
                                 final isTouched = e.key == _touchedIndex;
                                 final pct = totalAssetValue > 0
                                     ? (e.value.value / totalAssetValue) * 100
@@ -1089,10 +1097,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           if (isNarrow) {
                             return Column(
                               children: [
-                                SizedBox(
-                                  height: 160,
-                                  child: chart,
-                                ),
+                                SizedBox(height: 160, child: chart),
                                 const SizedBox(height: 14),
                                 Column(children: legendItems),
                               ],
@@ -1103,18 +1108,14 @@ class _DashboardPageState extends State<DashboardPage> {
                             children: [
                               Expanded(
                                 flex: 5,
-                                child: SizedBox(
-                                  height: 170,
-                                  child: chart,
-                                ),
+                                child: SizedBox(height: 170, child: chart),
                               ),
                               const SizedBox(width: 14),
                               Expanded(
                                 flex: 6,
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: legendItems,
                                 ),
                               ),
@@ -1141,7 +1142,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       onAction: () => widget.onNavigateToTab?.call(1),
                     ),
                     const SizedBox(height: 4),
-                    Row(
+                    Wrap(
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -1149,8 +1150,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: cs.onSurfaceVariant
-                                .withValues(alpha: 0.12),
+                            color: cs.onSurfaceVariant.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -1255,20 +1255,17 @@ class _DashboardPageState extends State<DashboardPage> {
               )
             else
               SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) {
-                    final tx = recentTx[i];
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                      child: _TransactionTile(
-                        tx: tx,
-                        fmt: _fmt,
-                        onTap: () => widget.onNavigateToTab?.call(2),
-                      ),
-                    );
-                  },
-                  childCount: recentTx.length,
-                ),
+                delegate: SliverChildBuilderDelegate((ctx, i) {
+                  final tx = recentTx[i];
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: _TransactionTile(
+                      tx: tx,
+                      fmt: _fmt,
+                      onTap: () => widget.onNavigateToTab?.call(2),
+                    ),
+                  );
+                }, childCount: recentTx.length),
               ),
 
             const SliverToBoxAdapter(child: SizedBox(height: 28)),
@@ -1460,10 +1457,7 @@ class _LegendItem extends StatelessWidget {
   final AssetModel asset;
   final double percentage;
 
-  const _LegendItem({
-    required this.asset,
-    required this.percentage,
-  });
+  const _LegendItem({required this.asset, required this.percentage});
 
   @override
   Widget build(BuildContext context) {
@@ -1510,11 +1504,7 @@ class _TransactionTile extends StatelessWidget {
   final NumberFormat fmt;
   final VoidCallback? onTap;
 
-  const _TransactionTile({
-    required this.tx,
-    required this.fmt,
-    this.onTap,
-  });
+  const _TransactionTile({required this.tx, required this.fmt, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1559,8 +1549,9 @@ class _TransactionTile extends StatelessWidget {
                   children: [
                     Text(
                       tx.description,
-                      style:
-                          tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                      style: tt.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

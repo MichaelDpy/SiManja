@@ -94,7 +94,7 @@ class _DataTablePageState extends State<DataTablePage> {
 
   /// Transaksi setelah filter periode + pencarian teks.
   List<TransactionModel> get _displayRows {
-    var rows = _periodFiltered;
+    var rows = _periodFiltered.toList();
 
     if (_filterText.isNotEmpty) {
       final q = _filterText.toLowerCase();

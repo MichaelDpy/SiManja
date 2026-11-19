@@ -7,6 +7,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../core/app_state.dart';
 import '../core/theme.dart';
+import '../services/auth_service.dart';
+import '../widgets/session_scope.dart';
 
 // ── Validator nomor telepon Indonesia ────────────────────────────────────
 // Menerima format umum: 08xx, +628xx, 628xx — dengan/tanpa spasi/strip.
@@ -49,6 +51,7 @@ class _ProfilePageState extends State<ProfilePage> {
   late final TextEditingController _pendapatanCtrl;
 
   bool _isSaving = false;
+  bool _isLoggingOut = false;
   String? _saveError;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -106,6 +109,7 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _pickFromSource(ImageSource source) async {
+    final sessionRevision = AppState.instance.sessionRevision;
     // Tutup sheet dulu
     if (mounted) Navigator.pop(context);
 
@@ -128,6 +132,9 @@ class _ProfilePageState extends State<ProfilePage> {
         return;
       }
 
+      if (!mounted || AppState.instance.sessionRevision != sessionRevision) {
+        return;
+      }
       AppState.instance.updatePhoto(img.path);
     } on PlatformException catch (e) {
       if (!mounted) return;
@@ -221,49 +228,47 @@ class _ProfilePageState extends State<ProfilePage> {
   // ── Logout ────────────────────────────────────────────────────────────
 
   Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          'Keluar dari Akun?',
-          style: GoogleFonts.lato(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        content: Text(
-          'Sesi akan diakhiri dan data yang belum disinkronkan ke cloud '
-          'mungkin hilang. Pada tahap ini data masih tersimpan lokal — '
-          'logout hanya mengakhiri sesi tampilan.',
-          style: GoogleFonts.lato(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text(
-              'Batal',
-              style: GoogleFonts.lato(color: AppColors.textMuted),
-            ),
+    if (_isLoggingOut) return;
+    setState(() => _isLoggingOut = true);
+    try {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Keluar dari Akun?'),
+          content: const Text(
+            'Sesi Firebase akan diakhiri dan data lokal sesi ini akan dibersihkan.',
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(
-              'Keluar',
-              style: GoogleFonts.lato(
-                color: AppColors.expense,
-                fontWeight: FontWeight.w700,
-              ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal'),
             ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-    if (!mounted) return;
-
-    AppState.instance.reset();
-    Navigator.of(context).pushReplacementNamed('/login');
+            TextButton(
+              key: const Key('confirm-logout'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Keluar'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+      final session = SessionScope.maybeOf(context);
+      if (session != null) {
+        // Auth gate membersihkan data dan seluruh stack, termasuk dialog aktif.
+        await session.signOut();
+      } else {
+        await AuthService.instance.signOut();
+        AppState.instance.clearSession();
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/login', (_) => false);
+        }
+      }
+    } catch (_) {
+      if (mounted) _showPhotoError('Gagal keluar. Silakan coba lagi.');
+    } finally {
+      if (mounted) setState(() => _isLoggingOut = false);
+    }
   }
-
-  // ── Build ─────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -505,7 +510,8 @@ class _ProfilePageState extends State<ProfilePage> {
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _logout,
+                  key: const Key('profile-logout'),
+                  onPressed: _isLoggingOut ? null : _logout,
                   icon: const Icon(
                     Icons.logout,
                     size: 16,

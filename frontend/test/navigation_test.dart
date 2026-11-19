@@ -4,6 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'package:simanja/main.dart';
+
+import 'support/session_auth.dart';
+
 import 'package:simanja/screens/intro_page.dart';
 import 'package:simanja/screens/login_page.dart';
 import 'package:simanja/screens/main_shell.dart';
@@ -23,8 +26,9 @@ void main() {
 
   // ── SplashPage: auto-navigation ke /intro ─────────────────────────────
   group('SplashPage routing', () {
-    testWidgets('SplashPage mengarah ke /intro setelah timer selesai',
-        (tester) async {
+    testWidgets('SplashPage mengarah ke /intro setelah timer selesai', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           initialRoute: '/',
@@ -40,7 +44,7 @@ void main() {
 
       // Fast-forward melewati durasi timer splash (2800 ms)
       await tester.pump(const Duration(milliseconds: 2900));
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.byType(IntroPage), findsOneWidget);
       expect(find.byType(SplashPage), findsNothing);
@@ -297,8 +301,9 @@ void main() {
       );
     });
 
-    testWidgets('state halaman terjaga dalam IndexedStack saat ganti tab',
-        (tester) async {
+    testWidgets('state halaman terjaga dalam IndexedStack saat ganti tab', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(412, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -334,15 +339,19 @@ void main() {
       expect(find.byType(IntroPage), findsOneWidget);
     });
 
-    testWidgets('rute /home dapat diakses', (tester) async {
+    testWidgets('rute /home anonim dilindungi', (tester) async {
       tester.view.physicalSize = const Size(800, 600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(const SimanjaApp(initialRoute: '/home'));
+      final auth = SessionAuth();
+      await tester.pumpWidget(SimanjaApp(initialRoute: '/home', auth: auth));
       await tester.pump();
 
-      expect(find.byType(MainShell), findsOneWidget);
+      expect(find.byType(MainShell), findsNothing);
+      expect(find.byType(LoginPage), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await auth.events.close();
     });
   });
 }

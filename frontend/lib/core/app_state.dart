@@ -19,16 +19,55 @@ import 'mock_data.dart';
 ///   implementasi tanpa mengubah call site.
 class AppState extends ChangeNotifier {
   AppState._();
+  @visibleForTesting
+  AppState.forTesting();
   static final AppState instance = AppState._();
 
+  String? sessionUid;
+  int _sessionRevision = 0;
+  int get sessionRevision => _sessionRevision;
+
+  void beginSession(String uid, String authEmail) {
+    if (sessionUid != uid) {
+      _clearUserData();
+      sessionUid = uid;
+      name = authEmail.isEmpty ? 'Pengguna' : authEmail.split('@').first;
+    }
+    email = authEmail;
+    notifyListeners();
+  }
+
+  /// Logout tidak memuat fixture. Tema tetap preferensi perangkat pada tahap ini.
+  void clearSession() {
+    _clearUserData();
+    notifyListeners();
+  }
+
+  void _clearUserData() {
+    _sessionRevision++;
+    sessionUid = null;
+    name = '';
+    email = '';
+    phone = '';
+    address = '';
+    city = '';
+    job = '';
+    monthlyIncome = 0;
+    photoPath = null;
+    notifEnabled = true;
+    _transactions = [];
+    transactionsLoading = false;
+    transactionsError = null;
+  }
+
   // ── Profil User ────────────────────────────────────────────────────────
-  String name = MockData.dummyUser.name;
-  String email = MockData.dummyUser.email;
-  String phone = MockData.dummyUser.phone;
-  String address = MockData.dummyUser.address;
-  String city = MockData.dummyUser.city;
-  String job = MockData.dummyUser.job;
-  double monthlyIncome = MockData.dummyUser.monthlyIncome;
+  String name = '';
+  String email = '';
+  String phone = '';
+  String address = '';
+  String city = '';
+  String job = '';
+  double monthlyIncome = 0;
 
   /// Path lokal foto profil (null = belum ada foto).
   String? photoPath;
@@ -39,7 +78,7 @@ class AppState extends ChangeNotifier {
 
   // ── Transaksi ──────────────────────────────────────────────────────────
 
-  List<TransactionModel> _transactions = List.from(MockData.transactions);
+  List<TransactionModel> _transactions = [];
 
   /// Daftar transaksi yang tidak dapat diubah langsung oleh widget.
   /// Diurutkan: tanggal terbaru dulu, ID sebagai pembanding stabil.
@@ -132,15 +171,13 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Coba muat ulang transaksi (lokal: reset ke fixture demo).
+  /// Periksa ulang state lokal tanpa mengisi data contoh akun lain.
   ///
   /// C6 mengganti ini dengan re-fetch dari Firestore.
   Future<void> retryTransactions() async {
     transactionsLoading = true;
     transactionsError = null;
     notifyListeners();
-    // Implementasi lokal: langsung pakai data demo
-    _transactions = List.from(MockData.transactions);
     _sortTransactions();
     transactionsLoading = false;
     notifyListeners();
@@ -154,11 +191,13 @@ class AppState extends ChangeNotifier {
 
   // ── Reset ──────────────────────────────────────────────────────────────
 
-  /// Reset semua data ke default saat logout.
+  /// Fixture eksplisit untuk tes frontend; tidak dipanggil alur logout.
   ///
   /// C6/C4: saat logout, hentikan stream Firestore dan kosongkan data
   /// sebelum mengembalikan ke halaman login.
+  @visibleForTesting
   void reset() {
+    _clearUserData();
     name = MockData.dummyUser.name;
     email = MockData.dummyUser.email;
     phone = MockData.dummyUser.phone;

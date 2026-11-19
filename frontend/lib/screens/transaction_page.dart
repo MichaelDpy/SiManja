@@ -278,7 +278,7 @@ class _TransactionPageState extends State<TransactionPage>
           // Label data contoh — sesuai kontrak B2
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
-            child: Row(
+            child: Wrap(
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(

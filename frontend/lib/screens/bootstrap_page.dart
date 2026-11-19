@@ -28,7 +28,7 @@ class _BootstrapPageState extends State<BootstrapPage> {
       if (snapshot.connectionState != ConnectionState.done) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
-      if (!snapshot.hasError) return const SplashPage();
+      if (!snapshot.hasError) return const SplashPage(nextRoute: '/session');
       return Scaffold(
         body: SafeArea(
           child: Center(

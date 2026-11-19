@@ -75,8 +75,9 @@ class _AssetPageState extends State<AssetPage> {
 
   void _selectCategory(String? category) {
     setState(() {
-      _selectedCategory =
-          (category == null || category == 'Semua') ? null : category;
+      _selectedCategory = (category == null || category == 'Semua')
+          ? null
+          : category;
       _touchedIndex = -1;
     });
   }
@@ -163,8 +164,9 @@ class _AssetPageState extends State<AssetPage> {
                     title: Text(
                       asset.name,
                       style: tt.bodyMedium?.copyWith(
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
                       ),
                     ),
                     subtitle: Text(
@@ -191,9 +193,6 @@ class _AssetPageState extends State<AssetPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final tt = theme.textTheme;
-
     // Filter data aset
     final filteredAssets = AssetCalculator.filterByCategory(
       MockData.assets,
@@ -204,8 +203,8 @@ class _AssetPageState extends State<AssetPage> {
     // Amankan index sentuh agar tidak out of bounds setelah filter
     final safeTouchedIndex =
         (_touchedIndex >= 0 && _touchedIndex < filteredAssets.length)
-            ? _touchedIndex
-            : -1;
+        ? _touchedIndex
+        : -1;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -342,9 +341,7 @@ class _AssetPageState extends State<AssetPage> {
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: cs.outline.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.35)),
       ),
       child: Column(
         children: [
@@ -422,7 +419,9 @@ class _AssetPageState extends State<AssetPage> {
                   fontWeight: _selectedCategory == null
                       ? FontWeight.w700
                       : FontWeight.w500,
-                  color: _selectedCategory == null ? Colors.white : cs.onSurface,
+                  color: _selectedCategory == null
+                      ? Colors.white
+                      : cs.onSurface,
                 ),
                 selectedColor: AppColors.teal,
                 backgroundColor: cs.surface,
@@ -453,8 +452,9 @@ class _AssetPageState extends State<AssetPage> {
                     onSelected: (_) => _selectCategory(asset.name),
                     labelStyle: GoogleFonts.lato(
                       fontSize: 11,
-                      fontWeight:
-                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
                       color: isSelected ? Colors.white : cs.onSurface,
                     ),
                     selectedColor: AppColors.teal,
@@ -489,10 +489,9 @@ class _AssetPageState extends State<AssetPage> {
     final tt = theme.textTheme;
 
     // Hitung label dan nilai di tengah diagram
-    final touchedAsset =
-        (touchedIndex >= 0 && touchedIndex < assets.length)
-            ? assets[touchedIndex]
-            : null;
+    final touchedAsset = (touchedIndex >= 0 && touchedIndex < assets.length)
+        ? assets[touchedIndex]
+        : null;
 
     final centerLabel = touchedAsset != null
         ? touchedAsset.name
@@ -519,21 +518,19 @@ class _AssetPageState extends State<AssetPage> {
       decoration: BoxDecoration(
         color: cs.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: cs.outline.withValues(alpha: 0.35),
-        ),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
             children: [
               Text(
                 'Distribusi Portofolio',
-                style: tt.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
               if (_selectedCategory != null)
                 TextButton.icon(
@@ -541,8 +538,10 @@ class _AssetPageState extends State<AssetPage> {
                   icon: const Icon(Icons.refresh, size: 14),
                   label: const Text('Reset'),
                   style: TextButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     minimumSize: const Size(40, 30),
                   ),
                 ),
@@ -565,9 +564,7 @@ class _AssetPageState extends State<AssetPage> {
                   const SizedBox(height: 12),
                   Text(
                     'Tidak ada data aset untuk ditampilkan',
-                    style: tt.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                    ),
+                    style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
@@ -595,8 +592,8 @@ class _AssetPageState extends State<AssetPage> {
                               _touchedIndex = -1;
                               return;
                             }
-                            _touchedIndex = response
-                                .touchedSection!.touchedSectionIndex;
+                            _touchedIndex =
+                                response.touchedSection!.touchedSectionIndex;
                           });
                         },
                       ),
@@ -613,9 +610,7 @@ class _AssetPageState extends State<AssetPage> {
                           value: asset.value,
                           color: asset.color,
                           radius: isTouched ? touchedRadius : normalRadius,
-                          title: isTouched
-                              ? '${pct.toStringAsFixed(1)}%'
-                              : '',
+                          title: isTouched ? '${pct.toStringAsFixed(1)}%' : '',
                           titleStyle: GoogleFonts.lato(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -698,15 +693,11 @@ class _AssetPageState extends State<AssetPage> {
           children: [
             Text(
               'Detail Aset',
-              style: tt.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             Text(
               '${assets.length} Aset',
-              style: tt.bodySmall?.copyWith(
-                color: cs.onSurfaceVariant,
-              ),
+              style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
             ),
           ],
         ),
@@ -718,9 +709,7 @@ class _AssetPageState extends State<AssetPage> {
             decoration: BoxDecoration(
               color: cs.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: cs.outline.withValues(alpha: 0.3),
-              ),
+              border: Border.all(color: cs.outline.withValues(alpha: 0.3)),
             ),
             child: Column(
               children: [
@@ -732,17 +721,13 @@ class _AssetPageState extends State<AssetPage> {
                 const SizedBox(height: 10),
                 Text(
                   'Tidak ada data aset untuk filter ini',
-                  style: tt.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: tt.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Pilih kategori lain atau reset filter.',
-                  style: tt.bodySmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                  ),
+                  style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
@@ -803,9 +788,7 @@ class _AssetDetailCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: cs.outline.withValues(alpha: 0.3),
-            ),
+            border: Border.all(color: cs.outline.withValues(alpha: 0.3)),
           ),
           child: Column(
             children: [
