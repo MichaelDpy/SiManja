@@ -111,6 +111,20 @@ Konfigurasi client tidak memerlukan service-account/private key. Password dikelo
 
 Rules lokal tidak otomatis berlaku di cloud. Setelah pengguna benar-benar memilih project tujuan, deploy rules dilakukan dari `backend/` menggunakan `npx.cmd firebase deploy --only firestore:rules --project ID_PROJECT_YANG_DIPILIH`. Ganti placeholder dengan ID yang telah diperiksa; perintah ini **belum dijalankan** pada pekerjaan ini. Rujukan: [deploy Firebase Security Rules](https://firebase.google.com/docs/rules/manage-deploy).
 
+## Permintaan hapus akun (Cloud Functions, B10)
+
+Layanan tepercaya berada di `backend/functions/`: Node 22, `firebase-functions` v2, region `us-central1` sampai region R00 diputuskan. Layanan ini **hanya diuji di Firebase Emulator**. Deploy membutuhkan paket Blaze serta keputusan target dan region, jadi belum dilakukan.
+
+| Callable | Perilaku |
+| --- | --- |
+| `getAccountDeletionStatus` | Status milik pemanggil: `none` / `requested` / `processing` / `completed` / `failed` / `cancelled` |
+| `requestAccountDeletion({requestId})` | Wajib login dengan `auth_time` ≤ 5 menit dan akun Auth aktif. Membuat `requested` sekali saja; permintaan ulang mengembalikan status yang ada (idempoten, berbasis transaction). |
+| `cancelAccountDeletion()` | Hanya saat `requested`. Tanpa permintaan, status tidak berubah. `processing`/`completed` ditolak. |
+
+UID selalu diambil dari token Auth. Field `uid` di payload diabaikan. Status disimpan di `accountLifecycle/{uid}`, koleksi khusus Admin SDK: rules client default-deny sehingga aplikasi tidak bisa membaca atau mengubahnya. Kontrak lanjutan (pembekuan write C09, worker pembersihan B11, revokasi dan retensi B12, UI B13) memakai status `requested`/`processing`/`completed` sebagai sinyal beku. Client Dart ada di `frontend/lib/services/account_deletion_service.dart`.
+
+Emulator Functions berjalan di port `5001` dan ikut menyala lewat `npm.cmd run emulators`. Script itu juga memasang dependensi `functions/` lebih dulu. Untuk perangkat fisik, port 5001 juga harus dapat dijangkau, sama seperti 9099 dan 8080.
+
 ## Schema dan perilaku penyimpanan
 
 | Lokasi | Field |

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -20,6 +21,11 @@ abstract final class FirebaseBootstrap {
   static FirebaseAuth get auth => FirebaseAuth.instanceFor(app: app);
   static FirebaseFirestore get firestore =>
       FirebaseFirestore.instanceFor(app: app);
+
+  /// Region harus sama dengan backend/functions/src/index.js (REGION).
+  static const functionsRegion = 'us-central1';
+  static FirebaseFunctions get functions =>
+      FirebaseFunctions.instanceFor(app: app, region: functionsRegion);
 
   /// Konfigurasi aktif; null sebelum inisialisasi berhasil divalidasi.
   static FirebaseEnvironmentConfig? get config => _config;
@@ -79,6 +85,7 @@ abstract final class FirebaseBootstrap {
       );
       await auth.useAuthEmulator(host, config.authPort);
       firestore.useFirestoreEmulator(host, config.firestorePort);
+      functions.useFunctionsEmulator(host, config.functionsPort);
       _emulatorsConnected = true;
     }
   }

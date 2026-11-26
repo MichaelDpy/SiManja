@@ -1,0 +1,17 @@
+{
+  "name": "simanja-functions",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": "22"
+  },
+  "scripts": {
+    "lint": "node --check src/index.js && node --check src/deletion.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.1",
+    "firebase-functions": "^7.4.0",
+    "simanja-backend-tests": "file:.."
+  }
+}

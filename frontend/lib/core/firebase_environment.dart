@@ -55,6 +55,7 @@ class FirebaseEnvironmentConfig {
     this.emulatorHost = '',
     this.authPort = 9099,
     this.firestorePort = 8080,
+    this.functionsPort = 5001,
     this.googleServerClientId = '',
   });
 
@@ -70,6 +71,7 @@ class FirebaseEnvironmentConfig {
   final String emulatorHost;
   final int authPort;
   final int firestorePort;
+  final int functionsPort;
 
   /// OAuth Web client ID project (bukan secret) untuk Google Sign-In native
   /// Android. Kosong → login Google tidak ditawarkan di Android/iOS.
@@ -107,6 +109,10 @@ class FirebaseEnvironmentConfig {
       'FIREBASE_FIRESTORE_PORT',
       defaultValue: 8080,
     ),
+    functionsPort: const int.fromEnvironment(
+      'FIREBASE_FUNCTIONS_PORT',
+      defaultValue: 5001,
+    ),
     googleServerClientId: const String.fromEnvironment(
       'GOOGLE_SERVER_CLIENT_ID',
     ),
@@ -143,6 +149,7 @@ class FirebaseEnvironmentConfig {
     String emulatorHost = '',
     int authPort = 9099,
     int firestorePort = 8080,
+    int functionsPort = 5001,
     String googleServerClientId = '',
     required FirebaseAppPlatform platform,
     required bool releaseBuild,
@@ -197,6 +204,9 @@ class FirebaseEnvironmentConfig {
       if (authPort <= 0 || authPort > 65535) {
         issues.add('FIREBASE_AUTH_PORT harus 1–65535.');
       }
+      if (functionsPort <= 0 || functionsPort > 65535) {
+        issues.add('FIREBASE_FUNCTIONS_PORT harus 1–65535.');
+      }
       if (firestorePort <= 0 || firestorePort > 65535) {
         issues.add('FIREBASE_FIRESTORE_PORT harus 1–65535.');
       }
@@ -238,6 +248,7 @@ class FirebaseEnvironmentConfig {
       emulatorHost: emulatorHost.trim(),
       authPort: authPort,
       firestorePort: firestorePort,
+      functionsPort: functionsPort,
       googleServerClientId: googleClient,
     );
   }

@@ -6,8 +6,9 @@
     "node": ">=22.16.0"
   },
   "scripts": {
-    "emulators": "firebase emulators:start --project demo-simanja",
-    "test": "firebase emulators:exec --only auth,firestore --project demo-simanja \"node --test --test-concurrency=1 test/*.test.mjs\""
+    "emulators": "npm --prefix functions install --no-audit --no-fund && firebase emulators:start --project demo-simanja",
+    "pretest": "npm --prefix functions install --no-audit --no-fund",
+    "test": "firebase emulators:exec --only auth,firestore,functions --project demo-simanja \"node --test --test-concurrency=1 test/*.test.mjs\""
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
