@@ -55,7 +55,7 @@ Folder `.cache/` tidak ikut Git. Jangan memakai perintah pengujian untuk menyimp
 
 ## Menghubungkan project Firebase asli
 
-Pilih project yang benar di Firebase Console, daftarkan aplikasi sesuai target, aktifkan provider **Email/Password** di Authentication, dan siapkan database Cloud Firestore `(default)`. Android saat ini memakai application ID `com.example.simanja`; registrasi target harus sesuai konfigurasi aplikasi. Ikuti [setup Flutter](https://firebase.google.com/docs/flutter/setup) dan [Auth email/password](https://firebase.google.com/docs/auth/flutter/password-auth).
+Pilih project yang benar di Firebase Console, daftarkan aplikasi sesuai target, aktifkan provider **Email/Password** di Authentication, dan siapkan database Cloud Firestore `(default)`. Android memakai application ID **`com.simanja.app`** (keputusan tim 26 November 2026), jadi daftarkan aplikasi Android Firebase dengan ID tersebut. Bundle ID iOS masih `com.example.simanja` karena target iOS belum diputuskan. Ikuti [setup Flutter](https://firebase.google.com/docs/flutter/setup) dan [Auth email/password](https://firebase.google.com/docs/auth/flutter/password-auth).
 
 ### Lingkungan Firebase (dev / staging / production)
 
@@ -83,6 +83,21 @@ flutter run --dart-define-from-file=config/firebase.staging.json
 ```
 
 App ID berbeda untuk setiap platform, jadi siapkan file per target bila perlu. Konfigurasi client ini bukan secret server, tetapi setiap anggota mengisi target miliknya sendiri. Nilai staging/production asli belum tersedia, sehingga inisialisasi ke project cloud **belum diverifikasi**.
+
+### Signing rilis Android
+
+Build debug/profile memakai kunci debug lokal Android SDK. Build rilis (`flutter build apk --release` / `appbundle`) **hanya** memakai kunci rilis dari `frontend/android/key.properties`. Tanpa file itu, build rilis berhenti dengan pesan "memerlukan kunci rilis" dan tidak pernah memakai kunci debug.
+
+Pemilik rilis membuat keystore di luar repository, lalu menulis `frontend/android/key.properties`:
+
+```properties
+storeFile=C:/lokasi/aman/upload-keystore.jks
+storePassword=...
+keyAlias=upload
+keyPassword=...
+```
+
+`key.properties`, `*.jks`, `*.keystore`, dan `*.p12` diabaikan Git. Jangan mengirim keystore atau password lewat chat, PR, atau file bersama. Fingerprint SHA-1/SHA-256 sertifikat (bukan rahasia) didaftarkan ke Firebase/Google untuk login Google: kunci debug setiap laptop berbeda, sedangkan fingerprint kunci rilis dan Play App Signing dicatat saat kunci tersebut tersedia.
 
 Konfigurasi client tidak memerlukan service-account/private key. Password dikelola Firebase Auth dan tidak disimpan pada dokumen Firestore. Jangan memasukkan token CLI atau private credential ke repository.
 

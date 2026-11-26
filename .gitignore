@@ -121,6 +121,14 @@ storage-debug.log
 secrets.json
 secrets.yaml
 
+# ─── Kunci signing rilis Android/iOS (jangan pernah di-commit) ──────────────
+key.properties
+**/android/key.properties
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+
 # ─── Backend (masa depan) ────────────────────────────────────────────────────
 backend/node_modules/
 backend/.firebase/

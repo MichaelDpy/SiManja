@@ -1,11 +1,34 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// ─── Signing rilis ───────────────────────────────────────────────────────────
+// Kunci rilis TIDAK ada di repository. Pemilik rilis membuat
+// android/key.properties (diabaikan Git) yang menunjuk ke keystore di luar Git.
+// Tanpa file itu, build debug/profile tetap jalan, tetapi build rilis
+// (APK/AAB) berhenti dengan pesan jelas — tidak pernah jatuh ke kunci debug.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
+    val requiredKeys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    val missing = requiredKeys.filter { keystoreProperties.getProperty(it).isNullOrBlank() }
+    if (missing.isNotEmpty()) {
+        throw GradleException(
+            "android/key.properties belum lengkap: ${missing.joinToString()}. " +
+                "Lihat README bagian Signing rilis Android.",
+        )
+    }
+}
+
 android {
-    namespace = "com.example.simanja"
+    namespace = "com.simanja.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +38,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.simanja"
+        // Identitas permanen aplikasi (keputusan tim 26 Nov 2026, B02).
+        // Dipakai registrasi Firebase Android app, OAuth/Google login, dan Play.
+        applicationId = "com.simanja.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -29,11 +53,39 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Hanya kunci rilis; tidak ada fallback ke signingConfigs "debug".
+            signingConfig =
+                if (hasReleaseKeystore) signingConfigs.getByName("release") else null
+        }
+    }
+}
+
+// Gagal sebelum pekerjaan build dimulai bila artefak rilis diminta tanpa kunci.
+gradle.taskGraph.whenReady {
+    if (!hasReleaseKeystore) {
+        val releaseTask = allTasks.firstOrNull { task ->
+            task.project == project &&
+                Regex("^(assemble|bundle|package|sign)Release(Bundle)?$").matches(task.name)
+        }
+        if (releaseTask != null) {
+            throw GradleException(
+                "Build rilis (${releaseTask.name}) memerlukan kunci rilis. " +
+                    "Buat android/key.properties sesuai README bagian Signing rilis Android. " +
+                    "Kunci debug tidak dipakai untuk rilis.",
+            )
         }
     }
 }
