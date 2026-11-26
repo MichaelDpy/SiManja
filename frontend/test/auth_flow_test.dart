@@ -59,6 +59,22 @@ class ControlledAuth implements AuthGateway {
   @override
   Future<void> changePassword(ReauthGrant grant, String newPassword) =>
       throw UnimplementedError();
+
+  @override
+  bool googleSignInAvailable = false;
+  @override
+  Future<void> signInWithGoogle() => _request('google', '');
+  @override
+  Future<ReauthGrant> reauthenticateWithGoogle(SensitiveOperation op) =>
+      throw UnimplementedError();
+  @override
+  Future<void> linkGoogle(ReauthGrant grant) => throw UnimplementedError();
+  @override
+  Future<void> linkPassword(ReauthGrant grant, String newPassword) =>
+      throw UnimplementedError();
+  @override
+  Future<void> unlinkProvider(ReauthGrant grant, String providerId) =>
+      throw UnimplementedError();
 }
 
 Future<void> pumpPage(

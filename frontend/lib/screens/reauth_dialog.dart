@@ -45,16 +45,27 @@ class _ReauthDialogState extends State<_ReauthDialog> {
 
   Future<void> _submit() async {
     if (_busy || !_form.currentState!.validate()) return;
+    await _run(
+      () => widget.auth.reauthenticateWithPassword(
+        _password.text,
+        widget.operation,
+      ),
+    );
+  }
+
+  Future<void> _google() async {
+    if (_busy) return;
+    await _run(() => widget.auth.reauthenticateWithGoogle(widget.operation));
+  }
+
+  Future<void> _run(Future<ReauthGrant> Function() reauth) async {
     final uid = widget.auth.currentUser?.uid;
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final grant = await widget.auth.reauthenticateWithPassword(
-        _password.text,
-        widget.operation,
-      );
+      final grant = await reauth();
       if (!mounted) return;
       // Grant untuk UID yang sudah berganti tidak boleh dipakai.
       if (uid == null || grant.uid != uid) {
@@ -66,6 +77,11 @@ class _ReauthDialogState extends State<_ReauthDialog> {
         return;
       }
       Navigator.of(context).pop(grant);
+    } on FirebaseAuthException catch (error) {
+      // Batal di UI Google: tetap di dialog tanpa pesan error.
+      if (mounted && error.code != AuthErrorCodes.cancelled) {
+        setState(() => _error = authErrorMessage(error));
+      }
     } catch (error) {
       if (mounted) setState(() => _error = authErrorMessage(error));
     } finally {
@@ -77,10 +93,46 @@ class _ReauthDialogState extends State<_ReauthDialog> {
   Widget build(BuildContext context) {
     final user = widget.auth.currentUser;
     final passwordAccount = user?.hasPasswordProvider ?? false;
+    final googleAccount =
+        (user?.providerIds.contains(googleProviderId) ?? false) &&
+        widget.auth.googleSignInAvailable;
+    final errorText = _error == null
+        ? null
+        : Semantics(
+            liveRegion: true,
+            child: Text(
+              _error!,
+              key: const Key('reauth-error'),
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          );
+    final googleButton = OutlinedButton.icon(
+      key: const Key('reauth-google'),
+      onPressed: _busy ? null : _google,
+      icon: const Icon(Icons.g_mobiledata, size: 26),
+      label: const Text('Verifikasi dengan Google'),
+    );
     return AlertDialog(
       title: const Text('Verifikasi ulang'),
       content: SingleChildScrollView(
-        child: passwordAccount
+        child: !passwordAccount && googleAccount
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Demi keamanan, pilih ulang akun Google ${user!.email} '
+                    'sebelum ${widget.operation.label}.',
+                  ),
+                  const SizedBox(height: 16),
+                  googleButton,
+                  if (errorText != null) ...[
+                    const SizedBox(height: 12),
+                    errorText,
+                  ],
+                ],
+              )
+            : passwordAccount
             ? Form(
                 key: _form,
                 child: Column(
@@ -119,18 +171,15 @@ class _ReauthDialogState extends State<_ReauthDialog> {
                         ),
                       ),
                     ),
-                    if (_error != null) ...[
+                    if (googleAccount) ...[
                       const SizedBox(height: 12),
-                      Semantics(
-                        liveRegion: true,
-                        child: Text(
-                          _error!,
-                          key: const Key('reauth-error'),
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
-                      ),
+                      const Text('atau', textAlign: TextAlign.center),
+                      const SizedBox(height: 8),
+                      googleButton,
+                    ],
+                    if (errorText != null) ...[
+                      const SizedBox(height: 12),
+                      errorText,
                     ],
                   ],
                 ),
@@ -138,9 +187,8 @@ class _ReauthDialogState extends State<_ReauthDialog> {
             : Text(
                 user == null
                     ? 'Sesi berakhir. Silakan masuk kembali.'
-                    : 'Akun ini tidak memakai password, sehingga verifikasi '
-                          'ulang harus lewat metode masuk akun tersebut. Fitur '
-                          'itu belum tersedia.',
+                    : 'Metode masuk akun ini belum dapat dipakai untuk '
+                          'verifikasi ulang di perangkat ini.',
                 key: const Key('reauth-unsupported'),
               ),
       ),

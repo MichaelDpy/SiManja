@@ -55,6 +55,7 @@ class FirebaseEnvironmentConfig {
     this.emulatorHost = '',
     this.authPort = 9099,
     this.firestorePort = 8080,
+    this.googleServerClientId = '',
   });
 
   final FirebaseEnvironment environment;
@@ -69,6 +70,10 @@ class FirebaseEnvironmentConfig {
   final String emulatorHost;
   final int authPort;
   final int firestorePort;
+
+  /// OAuth Web client ID project (bukan secret) untuk Google Sign-In native
+  /// Android. Kosong → login Google tidak ditawarkan di Android/iOS.
+  final String googleServerClientId;
 
   bool get usesEmulators => environment.usesEmulators;
 
@@ -101,6 +106,9 @@ class FirebaseEnvironmentConfig {
     firestorePort: const int.fromEnvironment(
       'FIREBASE_FIRESTORE_PORT',
       defaultValue: 8080,
+    ),
+    googleServerClientId: const String.fromEnvironment(
+      'GOOGLE_SERVER_CLIENT_ID',
     ),
     platform: currentPlatform(),
     releaseBuild: kReleaseMode,
@@ -135,6 +143,7 @@ class FirebaseEnvironmentConfig {
     String emulatorHost = '',
     int authPort = 9099,
     int firestorePort = 8080,
+    String googleServerClientId = '',
     required FirebaseAppPlatform platform,
     required bool releaseBuild,
   }) {
@@ -206,6 +215,16 @@ class FirebaseEnvironmentConfig {
       );
     }
 
+    final googleClient = googleServerClientId.trim();
+    if (googleClient.isNotEmpty &&
+        (_placeholderPattern.hasMatch(googleClient) ||
+            !_googleClientPattern.hasMatch(googleClient))) {
+      issues.add(
+        'GOOGLE_SERVER_CLIENT_ID bukan format OAuth client ID '
+        '(…apps.googleusercontent.com).',
+      );
+    }
+
     if (issues.isNotEmpty) throw FirebaseConfigException(environment, issues);
 
     return FirebaseEnvironmentConfig._(
@@ -219,6 +238,7 @@ class FirebaseEnvironmentConfig {
       emulatorHost: emulatorHost.trim(),
       authPort: authPort,
       firestorePort: firestorePort,
+      googleServerClientId: googleClient,
     );
   }
 
@@ -226,6 +246,9 @@ class FirebaseEnvironmentConfig {
   static final _apiKeyPattern = RegExp(r'^AIza[0-9A-Za-z_-]{35}$');
   static final _appIdPattern = RegExp(r'^1:(\d+):(android|ios|web):[0-9a-f]+$');
   static final _senderPattern = RegExp(r'^\d+$');
+  static final _googleClientPattern = RegExp(
+    r'^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$',
+  );
   static final _emulatorHostPattern = RegExp(r'^[A-Za-z0-9]([A-Za-z0-9.-]*)$');
   // Penanda placeholder huruf besar. Project ID/App ID/domain asli selalu
   // huruf kecil, jadi penanda ini tidak menolak nilai sah. API key tidak

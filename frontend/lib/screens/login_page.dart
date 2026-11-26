@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -20,6 +21,7 @@ class _LoginPageState extends State<LoginPage> {
 
   bool _obscurePassword = true;
   bool _isLoading = false;
+  bool _googleLoading = false;
   String? _errorMessage;
 
   @override
@@ -29,6 +31,41 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  AuthGateway get _auth => widget.auth ?? AuthService.instance;
+
+  // Dipakai saat build: tidak boleh membuat instance Firebase.
+  bool get _googleAvailable =>
+      widget.auth?.googleSignInAvailable ?? AuthService.defaultGoogleAvailable;
+
+  Future<void> _loginWithGoogle() async {
+    if (_isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _googleLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await _auth.signInWithGoogle();
+      if (mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+      }
+    } on FirebaseAuthException catch (error) {
+      // Batal memilih akun bukan kesalahan: tetap di halaman tanpa pesan.
+      if (mounted && error.code != AuthErrorCodes.cancelled) {
+        setState(() => _errorMessage = authErrorMessage(error));
+      }
+    } catch (error) {
+      if (mounted) setState(() => _errorMessage = authErrorMessage(error));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _googleLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _login() async {
     if (_isLoading || !_formKey.currentState!.validate()) return;
     setState(() {
@@ -36,10 +73,7 @@ class _LoginPageState extends State<LoginPage> {
       _errorMessage = null;
     });
     try {
-      await (widget.auth ?? AuthService.instance).signIn(
-        _emailCtrl.text,
-        _passwordCtrl.text,
-      );
+      await _auth.signIn(_emailCtrl.text, _passwordCtrl.text);
       // Beri tahu password manager bahwa kredensial berhasil dipakai.
       TextInput.finishAutofillContext();
       if (mounted) {
@@ -275,7 +309,7 @@ class _LoginPageState extends State<LoginPage> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: _isLoading
+                    child: _isLoading && !_googleLoading
                         ? const SizedBox(
                             width: 22,
                             height: 22,
@@ -293,6 +327,35 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                   ),
                 ),
+                // Google hanya ditawarkan bila benar-benar terkonfigurasi.
+                if (_googleAvailable) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      key: const Key('login-google'),
+                      onPressed: _isLoading ? null : _loginWithGoogle,
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      icon: _googleLoading
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.g_mobiledata, size: 28),
+                      label: Text(
+                        _googleLoading
+                            ? 'Menghubungkan ke Google…'
+                            : 'Masuk dengan Google',
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

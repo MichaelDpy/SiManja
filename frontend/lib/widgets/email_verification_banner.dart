@@ -190,6 +190,21 @@ class _EmailVerificationBannerState extends State<EmailVerificationBanner>
                 ),
               ],
             ),
+            // Firebase mencabut password yang belum terverifikasi bila email
+            // yang sama kemudian dipakai login Google (terbukti di emulator).
+            if (!verified && widget.session.auth.googleSignInAvailable)
+              Padding(
+                padding: const EdgeInsets.only(left: 28, top: 4),
+                child: Text(
+                  'Verifikasi agar password tetap berlaku bila nanti Anda '
+                  'masuk dengan Google memakai email yang sama.',
+                  key: const Key('verify-google-note'),
+                  style: TextStyle(
+                    color: colors.onTertiaryContainer,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
             if (_message != null)
               Padding(
                 padding: const EdgeInsets.only(left: 28, top: 4),

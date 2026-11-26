@@ -131,4 +131,116 @@ class SessionAuth implements AuthGateway {
     passwordChanges.add(newPassword);
     validPassword = newPassword;
   }
+
+  // ── Google & metode masuk (B06–B08) ─────────────────────────────────────
+  @override
+  bool googleSignInAvailable = false;
+
+  /// Hasil UI Google berikutnya: null → batal.
+  String? googleEmail = 'g@gmail.com';
+  Object? googleFailure;
+  Completer<void>? pendingGoogle;
+  final googleCalls = <String>[];
+  final unlinked = <String>[];
+
+  Future<void> _google(String action) async {
+    googleCalls.add(action);
+    if (!googleSignInAvailable) {
+      throw FirebaseAuthException(code: AuthErrorCodes.googleUnavailable);
+    }
+    await pendingGoogle?.future;
+    if (googleFailure != null) throw googleFailure!;
+    if (googleEmail == null) {
+      throw FirebaseAuthException(code: AuthErrorCodes.cancelled);
+    }
+  }
+
+  void _setProviders(List<String> providers) {
+    final user = currentUser!;
+    emit(
+      SessionUser(
+        user.uid,
+        user.email,
+        emailVerified: user.emailVerified,
+        providerIds: providers,
+      ),
+    );
+  }
+
+  @override
+  Future<void> signInWithGoogle() async {
+    await _google('signIn');
+    emit(
+      SessionUser(
+        'google-$googleEmail',
+        googleEmail!,
+        emailVerified: true,
+        providerIds: const [googleProviderId],
+      ),
+    );
+  }
+
+  @override
+  Future<ReauthGrant> reauthenticateWithGoogle(
+    SensitiveOperation operation,
+  ) async {
+    reauthCalls.add(operation);
+    final user = currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(code: AuthErrorCodes.noCurrentUser);
+    }
+    if (!user.providerIds.contains(googleProviderId)) {
+      throw FirebaseAuthException(
+        code: AuthErrorCodes.reauthProviderUnsupported,
+      );
+    }
+    await _google('reauth');
+    return ReauthGrant(uid: user.uid, operation: operation);
+  }
+
+  ReauthGrant _check(ReauthGrant grant, SensitiveOperation op) {
+    final user = currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(code: AuthErrorCodes.noCurrentUser);
+    }
+    if (!grant.allows(user.uid, op)) {
+      throw FirebaseAuthException(code: AuthErrorCodes.reauthMismatch);
+    }
+    return grant;
+  }
+
+  @override
+  Future<void> linkGoogle(ReauthGrant grant) async {
+    _check(grant, SensitiveOperation.linkProvider);
+    await _google('link');
+    _setProviders([...currentUser!.providerIds, googleProviderId]);
+  }
+
+  @override
+  Future<void> linkPassword(ReauthGrant grant, String newPassword) async {
+    _check(grant, SensitiveOperation.linkProvider);
+    validPassword = newPassword;
+    _setProviders([...currentUser!.providerIds, passwordProviderId]);
+  }
+
+  @override
+  Future<void> unlinkProvider(ReauthGrant grant, String providerId) async {
+    _check(grant, SensitiveOperation.unlinkProvider);
+    final reason = unlinkBlockReason(
+      currentUser!.providerIds,
+      providerId,
+      googleAvailable: googleSignInAvailable,
+    );
+    if (reason != null) {
+      throw FirebaseAuthException(
+        code: AuthErrorCodes.unlinkLockout,
+        message: reason,
+      );
+    }
+    unlinked.add(providerId);
+    _setProviders([
+      for (final id in currentUser!.providerIds)
+        if (id != providerId) id,
+    ]);
+  }
 }

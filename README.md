@@ -82,6 +82,14 @@ Copy-Item config/firebase.staging.example.json config/firebase.staging.json
 flutter run --dart-define-from-file=config/firebase.staging.json
 ```
 
+**Login Google (opsional).** Aktifkan provider Google di Firebase Console → Authentication. Untuk Android, isi `GOOGLE_SERVER_CLIENT_ID` dengan *Web client ID* OAuth project (`…apps.googleusercontent.com`, bukan secret), lalu daftarkan fingerprint SHA-1/SHA-256 setiap kunci yang dipakai: debug tiap laptop, upload, dan Play App Signing. Kalau nilainya kosong, tombol Google tidak ditampilkan di Android. Di Web, login Google memakai popup Firebase, termasuk popup tiruan dari Auth Emulator.
+
+Dengan setelan default Firebase "satu akun per email" (terbukti di Auth Emulator):
+- Login Google memakai email akun password yang **belum terverifikasi**: UID tetap sama, tetapi Firebase mencabut password-nya.
+- Bila email itu **sudah terverifikasi**, kedua metode tetap aktif.
+- Aplikasi tidak pernah menggabungkan dua UID. Google milik akun lain ditolak.
+- Melepas metode masuk terakhir dicegah di aplikasi, karena server Firebase sendiri mengizinkannya.
+
 App ID berbeda untuk setiap platform, jadi siapkan file per target bila perlu. Konfigurasi client ini bukan secret server, tetapi setiap anggota mengisi target miliknya sendiri. Nilai staging/production asli belum tersedia, sehingga inisialisasi ke project cloud **belum diverifikasi**.
 
 ### Signing rilis Android

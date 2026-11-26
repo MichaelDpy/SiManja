@@ -82,6 +82,21 @@ void main() {
       await cleanup(tester, auth);
     });
 
+    testWidgets('catatan Google hanya bila login Google tersedia', (
+      tester,
+    ) async {
+      final auth = SessionAuth(currentUser: unverified);
+      await pumpGate(tester, auth);
+      expect(find.byKey(const Key('verify-google-note')), findsNothing);
+      await cleanup(tester, auth);
+
+      final withGoogle = SessionAuth(currentUser: unverified)
+        ..googleSignInAvailable = true;
+      await pumpGate(tester, withGoogle);
+      expect(find.byKey(const Key('verify-google-note')), findsOneWidget);
+      await cleanup(tester, withGoogle);
+    });
+
     testWidgets('akun terverifikasi tidak melihat banner', (tester) async {
       final auth = SessionAuth(
         currentUser: const SessionUser(

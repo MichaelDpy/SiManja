@@ -10,6 +10,7 @@ import {
   signInWithEmailAndPassword, signOut, sendPasswordResetEmail,
   sendEmailVerification, applyActionCode, reload,
   reauthenticateWithCredential, updatePassword, EmailAuthProvider,
+  GoogleAuthProvider, signInWithCredential, linkWithCredential, unlink,
 } from 'firebase/auth';
 import { emulatorAddress, projectId } from './support/emulator.mjs';
 
@@ -140,4 +141,129 @@ test('B05: reauth dengan kredensial akun lain ditolak (user-mismatch)', async ()
     { code: 'auth/user-mismatch' },
   );
   assert.equal(auth.currentUser.uid, user.uid);
+});
+
+// ── B06–B08: Google (ID token tiruan khusus Auth Emulator) ──────────────
+// Auth Emulator menerima ID token Google berupa JSON tak bertanda tangan.
+// Ini membuktikan perilaku Firebase Auth, bukan konfigurasi OAuth project asli.
+const google = (address, sub = randomUUID()) =>
+  GoogleAuthProvider.credential(JSON.stringify({ sub, email: address, email_verified: true }));
+const providers = (user) => user.providerData.map((info) => info.providerId).sort();
+
+async function verify(auth, address) {
+  await sendEmailVerification(auth.currentUser);
+  await applyActionCode(auth, await oobCode(address, 'VERIFY_EMAIL'));
+  await reload(auth.currentUser);
+}
+
+test('B06: login Google membuat akun dengan provider google.com saja', async () => {
+  const auth = client();
+  const { user } = await signInWithCredential(auth, google(`${randomUUID()}@gmail.com`));
+  assert.deepEqual(providers(user), ['google.com']);
+  assert.equal(user.emailVerified, true);
+});
+
+test('B06: login Google ulang dengan akun Google sama → UID sama', async () => {
+  const address = `${randomUUID()}@gmail.com`;
+  const sub = randomUUID();
+  const { user } = await signInWithCredential(client(), google(address, sub));
+  const { user: again } = await signInWithCredential(client(), google(address, sub));
+  assert.equal(again.uid, user.uid);
+});
+
+test('B06: email sama, akun password BELUM terverifikasi → UID sama, password dicabut Firebase', async () => {
+  // Perilaku "satu akun per email": Google penyedia tepercaya untuk email ini
+  // sehingga kredensial password yang belum terverifikasi dihapus (anti-takeover).
+  const address = `${randomUUID()}@gmail.com`;
+  const { user } = await createUserWithEmailAndPassword(client(), address, password);
+  const { user: viaGoogle } = await signInWithCredential(client(), google(address));
+  assert.equal(viaGoogle.uid, user.uid, 'data milik UID yang sama tetap dapat diakses');
+  assert.deepEqual(providers(viaGoogle), ['google.com']);
+  await assert.rejects(signInWithEmailAndPassword(client(), address, password));
+});
+
+test('B06: email sama, akun password SUDAH terverifikasi → UID sama, kedua metode tetap', async () => {
+  const address = `${randomUUID()}@gmail.com`;
+  const first = client();
+  const { user } = await createUserWithEmailAndPassword(first, address, password);
+  await verify(first, address);
+  const { user: viaGoogle } = await signInWithCredential(client(), google(address));
+  assert.equal(viaGoogle.uid, user.uid);
+  assert.deepEqual(providers(viaGoogle), ['google.com', 'password']);
+  const { user: viaPassword } = await signInWithEmailAndPassword(client(), address, password);
+  assert.equal(viaPassword.uid, user.uid);
+});
+
+test('B07: akun email menghubungkan Google → UID dan login keduanya sama', async () => {
+  const address = email();
+  const sub = randomUUID();
+  const auth = client();
+  const { user } = await createUserWithEmailAndPassword(auth, address, password);
+  // Email Google boleh berbeda dari email akun; tetap UID yang sama.
+  const linked = await linkWithCredential(user, google(`${randomUUID()}@gmail.com`, sub));
+  assert.equal(linked.user.uid, user.uid);
+  assert.deepEqual(providers(linked.user), ['google.com', 'password']);
+  await signOut(auth);
+  const { user: viaGoogle } = await signInWithCredential(client(), google(`${randomUUID()}@gmail.com`, sub));
+  assert.equal(viaGoogle.uid, user.uid);
+});
+
+test('B07: Google yang sudah milik UID lain ditolak (credential-already-in-use), tanpa merge', async () => {
+  const sub = randomUUID();
+  const gmail = `${randomUUID()}@gmail.com`;
+  const { user: owner } = await signInWithCredential(client(), google(gmail, sub));
+  const auth = client();
+  const { user } = await createUserWithEmailAndPassword(auth, email(), password);
+  await assert.rejects(linkWithCredential(user, google(gmail, sub)), { code: 'auth/credential-already-in-use' });
+  await reload(auth.currentUser);
+  assert.equal(auth.currentUser.uid, user.uid);
+  assert.deepEqual(providers(auth.currentUser), ['password']);
+  assert.notEqual(owner.uid, user.uid);
+});
+
+test('B07: linkWithCredential password dengan email akun Google ditolak (email-already-in-use)', async () => {
+  // Dasar implementasi AuthService.linkPassword memakai updatePassword.
+  const gmail = `${randomUUID()}@gmail.com`;
+  const { user } = await signInWithCredential(client(), google(gmail));
+  await assert.rejects(
+    linkWithCredential(user, EmailAuthProvider.credential(gmail, password)),
+    { code: 'auth/email-already-in-use' },
+  );
+});
+
+test('B07: akun Google menambah password lewat updatePassword → UID sama, login password berhasil', async () => {
+  const gmail = `${randomUUID()}@gmail.com`;
+  const auth = client();
+  const { user } = await signInWithCredential(auth, google(gmail));
+  await updatePassword(user, password);
+  await reload(user);
+  assert.deepEqual(providers(auth.currentUser), ['google.com', 'password']);
+  await signOut(auth);
+  const { user: viaPassword } = await signInWithEmailAndPassword(client(), gmail, password);
+  assert.equal(viaPassword.uid, user.uid);
+});
+
+test('B08: lepas Google dari akun dua metode → password tetap, Google tidak lagi masuk ke UID itu', async () => {
+  const address = email();
+  const sub = randomUUID();
+  const gmail = `${randomUUID()}@gmail.com`;
+  const auth = client();
+  const { user } = await createUserWithEmailAndPassword(auth, address, password);
+  await linkWithCredential(user, google(gmail, sub));
+  const after = await unlink(auth.currentUser, 'google.com');
+  assert.deepEqual(providers(after), ['password']);
+  await signOut(auth);
+  const { user: viaPassword } = await signInWithEmailAndPassword(client(), address, password);
+  assert.equal(viaPassword.uid, user.uid);
+  const { user: viaGoogle } = await signInWithCredential(client(), google(gmail, sub));
+  assert.notEqual(viaGoogle.uid, user.uid, 'Google kini membuat akun terpisah');
+});
+
+test('B08: server MENGIZINKAN melepas metode terakhir → penjaga anti-lockout wajib di klien', async () => {
+  // Bukti mengapa unlinkBlockReason di aplikasi diperlukan: Firebase sendiri
+  // tidak mencegah akun tanpa metode masuk.
+  const auth = client();
+  const { user } = await signInWithCredential(auth, google(`${randomUUID()}@gmail.com`));
+  const after = await unlink(user, 'google.com');
+  assert.deepEqual(providers(after), []);
 });

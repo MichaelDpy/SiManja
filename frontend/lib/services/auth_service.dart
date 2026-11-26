@@ -1,4 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../core/firebase_bootstrap.dart';
 
@@ -133,6 +135,110 @@ abstract interface class AuthGateway {
 
   /// Mengganti password; wajib membawa [ReauthGrant] yang masih berlaku.
   Future<void> changePassword(ReauthGrant grant, String newPassword);
+
+  // ── Google & pengelolaan metode masuk (B06–B08) ─────────────────────────
+
+  /// true bila login Google dapat dipakai di perangkat/konfigurasi ini.
+  bool get googleSignInAvailable;
+
+  /// Masuk dengan Google. Batal → [AuthErrorCodes.cancelled]. Email yang
+  /// sudah terdaftar dengan metode lain tidak digabung otomatis.
+  Future<void> signInWithGoogle();
+
+  /// Autentikasi ulang lewat Google untuk akun yang terhubung Google.
+  Future<ReauthGrant> reauthenticateWithGoogle(SensitiveOperation operation);
+
+  /// Menghubungkan Google ke UID yang sedang masuk (grant [linkProvider]).
+  Future<void> linkGoogle(ReauthGrant grant);
+
+  /// Menambahkan password ke akun tanpa password (grant [linkProvider]).
+  Future<void> linkPassword(ReauthGrant grant, String newPassword);
+
+  /// Melepas satu metode masuk (grant [unlinkProvider]); ditolak bila akan
+  /// mengunci akun (lihat [unlinkBlockReason]).
+  Future<void> unlinkProvider(ReauthGrant grant, String providerId);
+}
+
+const passwordProviderId = 'password';
+const googleProviderId = 'google.com';
+
+/// Alasan melepas [target] harus ditolak, atau null bila aman.
+///
+/// Aman hanya bila tersisa minimal satu metode yang benar-benar dapat dipakai
+/// di perangkat ini: password selalu dapat dipakai; Google hanya bila
+/// [googleAvailable]; provider lain (mis. Apple) belum didukung aplikasi.
+String? unlinkBlockReason(
+  List<String> providers,
+  String target, {
+  required bool googleAvailable,
+}) {
+  if (!providers.contains(target)) return 'Metode ini tidak terhubung.';
+  final remaining = providers.where((id) => id != target).toList();
+  if (remaining.isEmpty) {
+    return 'Tidak bisa melepas satu-satunya metode masuk. Tambahkan metode '
+        'lain terlebih dahulu.';
+  }
+  final usable = remaining.any(
+    (id) =>
+        id == passwordProviderId || (id == googleProviderId && googleAvailable),
+  );
+  if (!usable) {
+    return 'Metode yang tersisa belum bisa dipakai untuk masuk di perangkat '
+        'ini. Tambahkan password terlebih dahulu.';
+  }
+  return null;
+}
+
+/// Sumber ID token Google native (Android/iOS), dipisah agar dapat diuji.
+abstract interface class GoogleIdTokenSource {
+  bool get available;
+
+  /// Menjalankan UI Google dan mengembalikan ID token.
+  /// Batal → FirebaseAuthException(code: [AuthErrorCodes.cancelled]).
+  Future<String> obtainIdToken();
+}
+
+/// Google Sign-In resmi (`google_sign_in`) dengan Web client ID project.
+class NativeGoogleIdTokenSource implements GoogleIdTokenSource {
+  NativeGoogleIdTokenSource(this.serverClientId);
+  final String serverClientId;
+  Future<void>? _init;
+
+  @override
+  bool get available =>
+      !kIsWeb &&
+      serverClientId.isNotEmpty &&
+      defaultTargetPlatform == TargetPlatform.android;
+
+  @override
+  Future<String> obtainIdToken() async {
+    if (!available) {
+      throw FirebaseAuthException(code: AuthErrorCodes.googleUnavailable);
+    }
+    final signIn = GoogleSignIn.instance;
+    await (_init ??= signIn.initialize(serverClientId: serverClientId));
+    try {
+      // Selalu tampilkan pemilih akun: hindari memakai akun Google terakhir
+      // secara diam-diam saat berganti akun SIMANJA.
+      await signIn.signOut();
+      final account = await signIn.authenticate();
+      final token = account.authentication.idToken;
+      if (token == null || token.isEmpty) {
+        throw FirebaseAuthException(code: AuthErrorCodes.googleUnavailable);
+      }
+      return token;
+    } on GoogleSignInException catch (error) {
+      if (error.code == GoogleSignInExceptionCode.canceled ||
+          error.code == GoogleSignInExceptionCode.interrupted) {
+        throw FirebaseAuthException(code: AuthErrorCodes.cancelled);
+      }
+      if (error.code == GoogleSignInExceptionCode.clientConfigurationError ||
+          error.code == GoogleSignInExceptionCode.providerConfigurationError) {
+        throw FirebaseAuthException(code: AuthErrorCodes.googleUnavailable);
+      }
+      throw FirebaseAuthException(code: 'network-request-failed');
+    }
+  }
 }
 
 /// Kode error untuk kondisi yang dibuat aplikasi (bukan dari SDK).
@@ -140,12 +246,29 @@ abstract final class AuthErrorCodes {
   static const noCurrentUser = 'no-current-user';
   static const reauthProviderUnsupported = 'reauth-provider-unsupported';
   static const reauthMismatch = 'reauth-grant-invalid';
+  static const cancelled = 'cancelled';
+  static const googleUnavailable = 'google-unavailable';
+  static const unlinkLockout = 'unlink-would-lockout';
 }
 
 class AuthService implements AuthGateway {
-  AuthService(this._auth);
+  AuthService(this._auth, {GoogleIdTokenSource? google})
+    : _google =
+          google ??
+          NativeGoogleIdTokenSource(
+            FirebaseBootstrap.config?.googleServerClientId ?? '',
+          );
   final FirebaseAuth _auth;
+  final GoogleIdTokenSource _google;
   static AuthService get instance => AuthService(FirebaseBootstrap.auth);
+
+  /// Ketersediaan Google untuk konfigurasi build ini tanpa menyentuh
+  /// instance Firebase (aman dipanggil saat build sebelum/ tanpa bootstrap).
+  static bool get defaultGoogleAvailable =>
+      kIsWeb ||
+      NativeGoogleIdTokenSource(
+        FirebaseBootstrap.config?.googleServerClientId ?? '',
+      ).available;
 
   /// userChanges juga memancarkan perubahan profil/token (mis. setelah
   /// reload), sehingga status verifikasi email ikut terbarui.
@@ -276,6 +399,127 @@ class AuthService implements AuthGateway {
     }
     await user.updatePassword(newPassword);
   }
+
+  // ── Google & metode masuk ───────────────────────────────────────────────
+
+  /// Web memakai popup Firebase (juga didukung Auth Emulator); Android
+  /// memakai google_sign_in dan membutuhkan GOOGLE_SERVER_CLIENT_ID.
+  @override
+  bool get googleSignInAvailable => kIsWeb || _google.available;
+
+  GoogleAuthProvider get _webProvider =>
+      GoogleAuthProvider()..setCustomParameters({'prompt': 'select_account'});
+
+  Future<AuthCredential> _nativeGoogleCredential() async =>
+      GoogleAuthProvider.credential(idToken: await _google.obtainIdToken());
+
+  /// Popup ditutup pengguna di Web diperlakukan sebagai batal.
+  Future<T> _guardCancel<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'popup-closed-by-user' ||
+          error.code == 'cancelled-popup-request' ||
+          error.code == 'web-context-canceled') {
+        throw FirebaseAuthException(code: AuthErrorCodes.cancelled);
+      }
+      rethrow;
+    }
+  }
+
+  void _requireGoogle() {
+    if (!googleSignInAvailable) {
+      throw FirebaseAuthException(code: AuthErrorCodes.googleUnavailable);
+    }
+  }
+
+  @override
+  Future<void> signInWithGoogle() => _guardCancel(() async {
+    _requireGoogle();
+    if (kIsWeb) {
+      await _auth.signInWithPopup(_webProvider);
+    } else {
+      await _auth.signInWithCredential(await _nativeGoogleCredential());
+    }
+  });
+
+  @override
+  Future<ReauthGrant> reauthenticateWithGoogle(SensitiveOperation operation) =>
+      _guardCancel(() async {
+        _requireGoogle();
+        final user = _requireUser();
+        if (!user.providerData.any((i) => i.providerId == googleProviderId)) {
+          throw FirebaseAuthException(
+            code: AuthErrorCodes.reauthProviderUnsupported,
+          );
+        }
+        final result = kIsWeb
+            ? await user.reauthenticateWithPopup(_webProvider)
+            : await user.reauthenticateWithCredential(
+                await _nativeGoogleCredential(),
+              );
+        final uid = result.user?.uid ?? user.uid;
+        if (uid != user.uid || _auth.currentUser?.uid != user.uid) {
+          throw FirebaseAuthException(code: 'user-mismatch');
+        }
+        return ReauthGrant(uid: uid, operation: operation);
+      });
+
+  User _requireGrant(ReauthGrant grant, SensitiveOperation operation) {
+    final user = _requireUser();
+    if (!grant.allows(user.uid, operation)) {
+      throw FirebaseAuthException(code: AuthErrorCodes.reauthMismatch);
+    }
+    return user;
+  }
+
+  /// Menghubungkan ke UID yang sama; tidak pernah menggabungkan dua UID.
+  /// `credential-already-in-use` diteruskan agar UI menjelaskannya.
+  @override
+  Future<void> linkGoogle(ReauthGrant grant) => _guardCancel(() async {
+    _requireGoogle();
+    final user = _requireGrant(grant, SensitiveOperation.linkProvider);
+    if (kIsWeb) {
+      await user.linkWithPopup(_webProvider);
+    } else {
+      await user.linkWithCredential(await _nativeGoogleCredential());
+    }
+    await user.reload();
+  });
+
+  @override
+  Future<void> linkPassword(ReauthGrant grant, String newPassword) async {
+    final user = _requireGrant(grant, SensitiveOperation.linkProvider);
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw FirebaseAuthException(code: 'missing-email');
+    }
+    // linkWithCredential(EmailAuthProvider) dengan email akun Google ditolak
+    // `email-already-in-use` (terbukti di Auth Emulator). updatePassword pada
+    // akun tanpa password menambahkan provider `password` ke UID yang sama.
+    await user.updatePassword(newPassword);
+    await user.reload();
+  }
+
+  @override
+  Future<void> unlinkProvider(ReauthGrant grant, String providerId) async {
+    final user = _requireGrant(grant, SensitiveOperation.unlinkProvider);
+    await user.reload();
+    final fresh = _auth.currentUser ?? user;
+    final reason = unlinkBlockReason(
+      [for (final info in fresh.providerData) info.providerId],
+      providerId,
+      googleAvailable: googleSignInAvailable,
+    );
+    if (reason != null) {
+      throw FirebaseAuthException(
+        code: AuthErrorCodes.unlinkLockout,
+        message: reason,
+      );
+    }
+    await fresh.unlink(providerId);
+    await fresh.reload();
+  }
 }
 
 /// Pemeriksaan lokal: hanya batas Firebase, tidak lebih lemah dan tidak
@@ -299,7 +543,24 @@ String? validateNewPassword(String? input) {
 /// mentah karena bisa memuat detail kredensial.
 String authErrorMessage(Object error) {
   if (error is FirebaseAuthException) {
+    // Satu-satunya pesan yang diteruskan: alasan buatan aplikasi sendiri.
+    if (error.code == AuthErrorCodes.unlinkLockout) {
+      return error.message ?? 'Metode masuk tidak dapat dilepas.';
+    }
     return switch (error.code) {
+      AuthErrorCodes.cancelled => 'Dibatalkan.',
+      AuthErrorCodes.googleUnavailable =>
+        'Login Google belum dikonfigurasi untuk aplikasi ini.',
+      'account-exists-with-different-credential' =>
+        'Email ini sudah terdaftar dengan metode lain. Masuk dengan metode '
+            'tersebut, lalu hubungkan Google dari Keamanan Akun.',
+      'credential-already-in-use' =>
+        'Akun Google ini sudah dipakai akun SIMANJA lain. Akun tidak digabung '
+            'otomatis.',
+      'provider-already-linked' => 'Metode masuk ini sudah terhubung.',
+      'no-such-provider' => 'Metode masuk ini sudah tidak terhubung.',
+      'popup-blocked' =>
+        'Jendela login diblokir browser. Izinkan pop-up lalu coba lagi.',
       'invalid-email' || 'missing-email' => 'Format email tidak valid.',
       'invalid-credential' ||
       'invalid-login-credentials' ||
