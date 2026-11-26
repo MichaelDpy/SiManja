@@ -219,7 +219,7 @@ class _TransactionPageState extends State<TransactionPage>
     if (!mounted) return;
 
     try {
-      await AppState.instance.deleteTransaction(tx.id);
+      await AppState.instance.deleteTransaction(tx.id, previous: tx);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/user_profile.dart';
+import '../models/record_version.dart';
+import 'record_concurrency.dart';
 
 abstract interface class ProfileRepository {
   Future<UserProfile> loadOrCreate(String uid, String email);
-  Future<void> save(
+  Future<UserProfile> save(
     String uid,
     UserProfile profile, {
     required UserProfile previous,
@@ -27,28 +29,60 @@ class FirestoreProfileRepository implements ProfileRepository {
   @override
   Future<UserProfile> loadOrCreate(String uid, String email) async {
     final ref = _ref(uid);
-    return _database().runTransaction((transaction) async {
+    await _database().runTransaction((transaction) async {
       final document = await transaction.get(ref);
-      if (document.exists) return UserProfile.fromMap(document.data()!);
+      if (document.exists) return;
       final profile = UserProfile.initial(email);
       transaction.set(ref, {
         ...profile.toMap(),
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        'revision': 1,
       });
-      return profile;
     });
+    return _confirmed(ref);
+  }
+
+  Future<UserProfile> _confirmed(
+    DocumentReference<Map<String, dynamic>> ref,
+  ) async {
+    final document = await ref.get(const GetOptions(source: Source.server));
+    if (!document.exists) throw const RecordConflict(ConflictReason.deleted);
+    final data = document.data()!;
+    final version = RecordConcurrency.read(data);
+    if (version == null) {
+      throw const FormatException('Metadata profil belum valid.');
+    }
+    return UserProfile.fromMap(data, version: version);
   }
 
   @override
-  Future<void> save(
+  Future<UserProfile> save(
     String uid,
     UserProfile profile, {
     required UserProfile previous,
   }) async {
     final ref = _ref(uid);
-    final changes = profile.changesSince(previous);
-    if (changes.isEmpty) return;
-    await ref.update({...changes, 'updatedAt': FieldValue.serverTimestamp()});
+    await _database().runTransaction((operation) async {
+      final document = await operation.get(ref);
+      if (!document.exists) throw const RecordConflict(ConflictReason.deleted);
+      final data = document.data()!;
+      final current = UserProfile.fromMap(data);
+      final actual = RecordConcurrency.read(data);
+      final changes = RecordConcurrency.profilePatch(
+        before: previous.toMap(),
+        desired: profile.toMap(),
+        current: current.toMap(),
+        expected: previous.version,
+        actual: actual,
+      );
+      if (changes.isEmpty) return;
+      operation.update(ref, {
+        ...changes,
+        'revision': RecordConcurrency.next(actual!),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
+    return _confirmed(ref);
   }
 }

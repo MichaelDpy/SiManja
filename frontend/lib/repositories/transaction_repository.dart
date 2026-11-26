@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../core/calendar_date.dart';
 import '../core/rupiah.dart';
 import '../models/transaction_model.dart';
+import '../models/record_version.dart';
+import 'record_concurrency.dart';
 
 class TransactionSnapshot {
   TransactionSnapshot(
@@ -23,7 +25,7 @@ abstract interface class TransactionRepository {
   Stream<TransactionSnapshot> watch(String uid);
   Future<void> add(String uid, TransactionModel transaction);
   Future<void> update(String uid, String id, TransactionModel transaction);
-  Future<void> delete(String uid, String id);
+  Future<void> delete(String uid, String id, {RecordVersion? expectedVersion});
 }
 
 abstract final class TransactionMapper {
@@ -113,6 +115,7 @@ abstract final class TransactionMapper {
       legacyDate: hasVersion
           ? null
           : LegacyTransactionDate(timestamp.seconds, timestamp.nanoseconds),
+      version: RecordConcurrency.read(data),
     );
     toMap(transaction);
     return transaction;
@@ -159,6 +162,11 @@ class FirestoreTransactionRepository implements TransactionRepository {
 
   @override
   Future<void> add(String uid, TransactionModel transaction) async {
+    if (transaction.version != null) {
+      throw ArgumentError(
+        'Transaksi yang sudah dimuat tidak boleh dibuat ulang.',
+      );
+    }
     final data = TransactionMapper.toMap(transaction);
     final ref = _ref(uid, transaction.id);
     await _database().runTransaction((operation) async {
@@ -169,6 +177,7 @@ class FirestoreTransactionRepository implements TransactionRepository {
         ...data,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
+        'revision': 1,
       });
     });
   }
@@ -183,12 +192,37 @@ class FirestoreTransactionRepository implements TransactionRepository {
       throw ArgumentError('ID transaksi tidak boleh berubah.');
     }
     final data = TransactionMapper.toMap(transaction);
-    await _ref(
-      uid,
-      id,
-    ).update({...data, 'updatedAt': FieldValue.serverTimestamp()});
+    final ref = _ref(uid, id);
+    await _database().runTransaction((operation) async {
+      final current = await operation.get(ref);
+      if (!current.exists) throw const RecordConflict(ConflictReason.deleted);
+      final actual = RecordConcurrency.read(current.data()!);
+      RecordConcurrency.requireSame(transaction.version, actual);
+      operation.update(ref, {
+        ...data,
+        'revision': RecordConcurrency.next(actual!),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+    });
   }
 
   @override
-  Future<void> delete(String uid, String id) => _ref(uid, id).delete();
+  Future<void> delete(
+    String uid,
+    String id, {
+    RecordVersion? expectedVersion,
+  }) async {
+    final ref = _ref(uid, id);
+    await _database().runTransaction((operation) async {
+      final current = await operation.get(ref);
+      if (!current.exists) {
+        return; // A repeated delete is a no-op, never a create.
+      }
+      RecordConcurrency.requireSame(
+        expectedVersion,
+        RecordConcurrency.read(current.data()!),
+      );
+      operation.delete(ref);
+    });
+  }
 }

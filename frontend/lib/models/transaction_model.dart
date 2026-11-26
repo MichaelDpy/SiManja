@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/calendar_date.dart';
 import '../core/rupiah.dart';
 import '../core/theme.dart';
+import 'record_version.dart';
 
 /// Model transaksi yang dapat disimpan ke Firestore.
 ///
@@ -26,6 +27,7 @@ class TransactionModel {
   final double amount;
   final bool isIncome;
   final DateTime date;
+  final RecordVersion? version;
 
   /// Raw legacy timestamp, retained until the user changes the calendar date
   /// or a reviewed migration resolves its missing source timezone.
@@ -40,6 +42,7 @@ class TransactionModel {
     required this.isIncome,
     required this.date,
     this.legacyDate,
+    this.version,
   });
 
   /// Validasi domain: amount harus finite, positif, dan merupakan bilangan bulat.
@@ -70,6 +73,7 @@ class TransactionModel {
       amount: amount ?? this.amount,
       isIncome: isIncome ?? this.isIncome,
       date: date ?? this.date,
+      version: version,
       legacyDate: date == null || CalendarDate.same(date, this.date)
           ? legacyDate
           : null,

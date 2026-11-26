@@ -1,3 +1,5 @@
+import 'record_version.dart';
+
 class UserProfile {
   const UserProfile({
     required this.name,
@@ -8,12 +10,14 @@ class UserProfile {
     this.monthlyIncome = 0,
     this.darkMode = true,
     this.notifEnabled = true,
+    this.version,
   });
 
   static const maxRupiah = 9007199254740991;
   final String name, phone, address, city, job;
   final double monthlyIncome;
   final bool darkMode, notifEnabled;
+  final RecordVersion? version;
 
   factory UserProfile.initial(String email) {
     final prefix = email.trim().split('@').first;
@@ -85,7 +89,10 @@ class UserProfile {
     };
   }
 
-  factory UserProfile.fromMap(Map<String, dynamic> data) {
+  factory UserProfile.fromMap(
+    Map<String, dynamic> data, {
+    RecordVersion? version,
+  }) {
     for (final field in ['name', 'phone', 'address', 'city', 'job']) {
       if (data[field] is! String) {
         throw const FormatException('Field profil tidak valid.');
@@ -107,6 +114,7 @@ class UserProfile {
       monthlyIncome: (data['monthlyIncome'] as int).toDouble(),
       darkMode: data['darkMode'],
       notifEnabled: data['notifEnabled'],
+      version: version,
     );
     result.toMap();
     return result;
@@ -130,6 +138,7 @@ class UserProfile {
     monthlyIncome: monthlyIncome ?? this.monthlyIncome,
     darkMode: darkMode ?? this.darkMode,
     notifEnabled: notifEnabled ?? this.notifEnabled,
+    version: version,
   );
 
   Map<String, Object> changesSince(UserProfile previous) {

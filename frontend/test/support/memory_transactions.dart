@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:simanja/models/transaction_model.dart';
+import 'package:simanja/models/record_version.dart';
 import 'package:simanja/repositories/transaction_repository.dart';
 
 class MemoryTransactions implements TransactionRepository {
@@ -82,7 +83,11 @@ class MemoryTransactions implements TransactionRepository {
   }
 
   @override
-  Future<void> delete(String uid, String id) async {
+  Future<void> delete(
+    String uid,
+    String id, {
+    RecordVersion? expectedVersion,
+  }) async {
     await _write();
     emit(uid, (rows[uid] ?? []).where((item) => item.id != id).toList());
   }

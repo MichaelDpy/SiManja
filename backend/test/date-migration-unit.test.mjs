@@ -63,6 +63,18 @@ test('tanpa keputusan, legacy midnight UTC tetap ambigu', async () => {
   assert.equal(report.entries[0].reason, 'REVIEW_REQUIRED');
 });
 
+test('migrasi tetap membaca revision C04 tanpa mengganti counter atau menerima revision invalid', async () => {
+  const input = row(); input.data.revision = 2;
+  const adapter = memory([input]);
+  const result = await runDateMigration({ adapter, scope, manifest: manifest([input]), apply: true,
+    journal: { async append() {} } });
+  assert.equal(result.counts.applied, 1);
+  assert.equal(input.data.revision, 2);
+  const invalid = row(); invalid.data.revision = '2';
+  const report = await runDateMigration({ adapter: memory([invalid]), scope });
+  assert.equal(report.entries[0].reason, 'INVALID_REVISION');
+});
+
 test('apply menyimpan before-image sebelum setiap batch dan rerun idempotent', async () => {
   const rows = [row('a'), row('b'), row('c')];
   const review = manifest(rows, '2024-02-29');

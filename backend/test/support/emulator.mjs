@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { Timestamp, serverTimestamp } from 'firebase/firestore';
+import { Timestamp, serverTimestamp, increment, updateDoc } from 'firebase/firestore';
+
+// Existing behavior tests use the C04 revision protocol for their valid writes;
+// dedicated conflict tests use raw updateDoc to verify rejected stale writes.
+export const versionedUpdate = (ref, data) => updateDoc(ref, { revision: increment(1), ...data });
 
 export const projectId = 'demo-simanja';
 

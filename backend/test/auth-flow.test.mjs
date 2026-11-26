@@ -9,10 +9,10 @@ import {
   verifyPasswordResetCode, confirmPasswordReset,
 } from 'firebase/auth';
 import {
-  getFirestore, connectFirestoreEmulator, doc, collection, setDoc, updateDoc,
+  getFirestore, connectFirestoreEmulator, doc, collection, setDoc,
   deleteDoc, getDocFromServer, getDocsFromServer, serverTimestamp, onSnapshot, terminate,
 } from 'firebase/firestore';
-import { emulatorAddress, projectId, profile, transaction } from './support/emulator.mjs';
+import { emulatorAddress, projectId, profile, transaction, versionedUpdate as updateDoc } from './support/emulator.mjs';
 
 const clients = [];
 const password = 'Demo-test-Password123!';

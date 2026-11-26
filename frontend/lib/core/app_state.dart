@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'finance_summary.dart';
 import 'mock_data.dart';
 import '../models/user_profile.dart';
+import '../models/record_version.dart';
 import '../repositories/profile_repository.dart';
 import '../repositories/transaction_repository.dart';
 
@@ -140,7 +141,10 @@ class AppState extends ChangeNotifier {
     monthlyIncome: monthlyIncome,
     darkMode: darkMode,
     notifEnabled: notifEnabled,
+    version: _loadedProfile?.version,
   );
+
+  UserProfile get profileSnapshot => _currentProfile();
 
   void _applyProfile(UserProfile profile) {
     name = profile.name;
@@ -153,8 +157,14 @@ class AppState extends ChangeNotifier {
     notifEnabled = profile.notifEnabled;
   }
 
-  Future<void> _saveProfile(UserProfile candidate) async {
-    final profile = UserProfile.fromMap(candidate.toMap());
+  Future<void> _saveProfile(
+    UserProfile candidate, {
+    UserProfile? previous,
+  }) async {
+    var profile = UserProfile.fromMap(
+      candidate.toMap(),
+      version: candidate.version,
+    );
     if (!profileReady || (sessionUid == null && !_allowLocalProfile)) {
       throw StateError('Profil belum siap.');
     }
@@ -165,12 +175,12 @@ class AppState extends ChangeNotifier {
     }
     final uid = sessionUid;
     final revision = _sessionRevision;
-    final previous = _loadedProfile ?? _currentProfile();
+    final base = previous ?? _loadedProfile ?? _currentProfile();
     profileSaving = true;
     notifyListeners();
     try {
       if (repository != null) {
-        await repository.save(uid!, profile, previous: previous);
+        profile = await repository.save(uid!, profile, previous: base);
       }
       if (revision != _sessionRevision) throw StateError('Sesi telah berubah.');
       _loadedProfile = profile;
@@ -266,12 +276,13 @@ class AppState extends ChangeNotifier {
     required String newCity,
     required String newJob,
     required double newIncome,
+    UserProfile? previous,
   }) async {
     if (newEmail.trim() != email) {
       throw ArgumentError('Email identitas tidak dapat diubah dari profil.');
     }
     await _saveProfile(
-      _currentProfile().copyWith(
+      (previous ?? _currentProfile()).copyWith(
         name: newName,
         phone: newPhone,
         address: newAddress,
@@ -279,6 +290,7 @@ class AppState extends ChangeNotifier {
         job: newJob,
         monthlyIncome: newIncome,
       ),
+      previous: previous,
     );
   }
 
@@ -328,14 +340,26 @@ class AppState extends ChangeNotifier {
     await _mutate(id, (repository, uid) => repository.update(uid, id, tx));
   }
 
-  Future<void> deleteTransaction(String id) async {
+  Future<void> deleteTransaction(
+    String id, {
+    TransactionModel? previous,
+  }) async {
+    if (previous != null && previous.id != id) {
+      throw ArgumentError('ID snapshot hapus tidak cocok.');
+    }
     if (_allowLocalTransactions) {
       _transactions = _transactions.where((item) => item.id != id).toList();
       notifyListeners();
       return;
     }
     TransactionMapper.validateId(id);
-    await _mutate(id, (repository, uid) => repository.delete(uid, id));
+    final base =
+        previous ?? _transactions.where((tx) => tx.id == id).firstOrNull;
+    await _mutate(
+      id,
+      (repository, uid) =>
+          repository.delete(uid, id, expectedVersion: base?.version),
+    );
   }
 
   Future<void> _mutate(
@@ -356,6 +380,8 @@ class AppState extends ChangeNotifier {
     try {
       await action(repository, uid);
       if (revision != _sessionRevision) throw StateError('Sesi telah berubah.');
+    } on RecordConflict {
+      rethrow;
     } catch (_) {
       throw StateError(
         'Perubahan belum dikonfirmasi server. Periksa koneksi atau izin akun.',

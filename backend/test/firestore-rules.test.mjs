@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 import { before, after, beforeEach, test } from 'node:test';
 import { initializeTestEnvironment, assertSucceeds } from '@firebase/rules-unit-testing';
 import {
-  doc, collection, collectionGroup, setDoc, updateDoc, deleteDoc, deleteField,
+  doc, collection, collectionGroup, setDoc, deleteDoc, deleteField,
   getDocFromServer, getDocsFromServer, serverTimestamp, Timestamp, writeBatch,
   query, where,
 } from 'firebase/firestore';
-import { emulatorAddress, projectId, profile, transaction } from './support/emulator.mjs';
+import { emulatorAddress, projectId, profile, transaction, versionedUpdate as updateDoc } from './support/emulator.mjs';
 
 let env;
 before(async () => {
@@ -77,7 +77,7 @@ test('R-DATE: legacy tetap sah, konfirmasi v2 diperbolehkan, downgrade ditolak',
   await denied(updateDoc(ref, { dateVersion: deleteField(), updatedAt: serverTimestamp() }));
   await denied(setDoc(ref, { ...transaction(), createdAt: legacy.createdAt }));
   await denied(updateDoc(ref, { date: legacy.date, updatedAt: serverTimestamp() }));
-  // A legacy writer using update for a non-date field remains compatible.
+  // A revision-aware partial writer can update non-date fields without changing date.
   await assertSucceeds(updateDoc(ref, { amount: 30, updatedAt: serverTimestamp() }));
   await denied(updateDoc(doc(db('B'), path()), { date: calendarTransaction().date, updatedAt: serverTimestamp() }));
 });

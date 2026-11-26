@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 const MIN_DATE = Date.parse('1900-01-01T00:00:00Z') / 1000;
 const MAX_DATE = Date.parse('2201-01-01T00:00:00Z') / 1000;
-const FIELDS = ['category', 'description', 'amount', 'isIncome', 'date', 'dateVersion', 'createdAt', 'updatedAt'];
+const FIELDS = ['category', 'description', 'amount', 'isIncome', 'date', 'dateVersion', 'createdAt', 'updatedAt', 'revision'];
 
 export function validId(value) {
   return typeof value === 'string' && value.trim().length > 0
@@ -66,6 +66,7 @@ function validateRecord(data) {
     throw new Error('MALFORMED_RECORD');
   }
   timestamp(data.createdAt);
+  if (Object.hasOwn(data, 'revision') && (!Number.isSafeInteger(data.revision) || data.revision < 1)) throw new Error('INVALID_REVISION');
   timestamp(data.updatedAt);
   const date = timestamp(data.date);
   if (date.seconds < MIN_DATE || date.seconds >= MAX_DATE) throw new Error('DATE_OUT_OF_BOUNDS');

@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../core/app_state.dart';
 import '../core/theme.dart';
 import '../models/user_profile.dart';
+import '../models/record_version.dart';
 import '../services/auth_service.dart';
 import '../widgets/session_scope.dart';
 
@@ -32,6 +33,7 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isSaving = false;
   bool _isLoggingOut = false;
   String? _saveError;
+  late UserProfile _editBase;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void initState() {
     super.initState();
     final s = AppState.instance;
+    _editBase = s.profileSnapshot;
     _namaCtrl = TextEditingController(text: s.name);
     _emailCtrl = TextEditingController(text: s.email);
     _waCtrl = TextEditingController(text: s.phone);
@@ -168,16 +171,31 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     setState(() => _isSaving = true);
+    final submitted = _editBase.copyWith(
+      name: _namaCtrl.text.trim(),
+      phone: _waCtrl.text.trim(),
+      address: _alamatCtrl.text.trim(),
+      city: _kotaCtrl.text.trim(),
+      job: _pekerjaanCtrl.text.trim(),
+      monthlyIncome: income ?? _editBase.monthlyIncome,
+    );
     try {
       // Tunggu konfirmasi write melalui AppState sebelum menampilkan sukses.
       await AppState.instance.updateProfile(
-        newName: _namaCtrl.text.trim(),
+        newName: submitted.name,
         newEmail: _emailCtrl.text.trim(),
-        newPhone: _waCtrl.text.trim(),
-        newAddress: _alamatCtrl.text.trim(),
-        newCity: _kotaCtrl.text.trim(),
-        newJob: _pekerjaanCtrl.text.trim(),
-        newIncome: income ?? AppState.instance.monthlyIncome,
+        newPhone: submitted.phone,
+        newAddress: submitted.address,
+        newCity: submitted.city,
+        newJob: submitted.job,
+        newIncome: submitted.monthlyIncome,
+        previous: _editBase,
+      );
+      // Keep the baseline aligned with the form, including untouched fields
+      // that may have merged with a different server value while saving.
+      _editBase = UserProfile.fromMap(
+        submitted.toMap(),
+        version: AppState.instance.profileSnapshot.version,
       );
 
       if (!mounted) return;
@@ -202,7 +220,9 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       if (!mounted) return;
       setState(
-        () => _saveError = e is ArgumentError
+        () => _saveError = e is RecordConflict
+            ? e.toString()
+            : e is ArgumentError
             ? e.message.toString()
             : 'Profil belum dapat disimpan. Periksa koneksi dan coba lagi.',
       );
@@ -218,9 +238,13 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _saveError = null);
     try {
       await save();
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => _saveError = 'Preferensi gagal disimpan. Coba lagi.');
+        setState(
+          () => _saveError = error is RecordConflict
+              ? error.toString()
+              : 'Preferensi gagal disimpan. Coba lagi.',
+        );
       }
     }
   }
