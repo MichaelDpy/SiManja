@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'rupiah.dart';
 import '../models/transaction_model.dart';
 
 /// Utilitas ekspor transaksi ke file CSV.
@@ -32,7 +33,7 @@ abstract final class CsvExporter {
     }
 
     try {
-      final csvBytes = _buildCsv(transactions, periodLabel);
+      final csvBytes = encode(transactions, periodLabel);
 
       final dir = await getTemporaryDirectory();
       final safePeriod = periodLabel
@@ -58,7 +59,8 @@ abstract final class CsvExporter {
 
   // ── CSV builder ───────────────────────────────────────────────────────
 
-  static List<int> _buildCsv(
+  /// Serializes the transaction snapshot used by sharing and regression tests.
+  static List<int> encode(
     List<TransactionModel> transactions,
     String periodLabel,
   ) {
@@ -90,7 +92,7 @@ abstract final class CsvExporter {
           tx.description,
           tx.isIncome ? 'pemasukan' : 'pengeluaran',
           // Nominal sebagai integer — tidak ambigu, mudah diolah spreadsheet
-          tx.amount.toInt().toString(),
+          Rupiah.digits(tx.amount),
         ].map(_quoteField).join(','),
       );
     }

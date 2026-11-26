@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/rupiah.dart';
 import '../core/theme.dart';
 
 /// Model transaksi yang dapat disimpan ke Firestore.
@@ -12,6 +13,7 @@ import '../core/theme.dart';
 /// - [category]    : String label; gunakan [CategoryMeta.knownCategories] sebagai referensi.
 /// - [description] : Teks keterangan bebas, tidak boleh kosong.
 /// - [amount]      : Rupiah bulat positif finite (`double`, integer semantik).
+///                   Maksimum [Rupiah.maxRecord]; agregasi memakai BigInt.
 ///                   Firestore menyimpan sebagai integer; konversi hanya setelah validasi.
 /// - [isIncome]    : true = pemasukan, false = pengeluaran.
 /// - [date]        : Tanggal transaksi (bukan waktu server).
@@ -35,6 +37,9 @@ class TransactionModel {
   /// Validasi domain: amount harus finite, positif, dan merupakan bilangan bulat.
   /// Lempar [ArgumentError] jika tidak valid.
   static void validate(double amount) {
+    if (amount > Rupiah.maxRecord) {
+      throw ArgumentError('amount melewati batas rupiah');
+    }
     if (!amount.isFinite) throw ArgumentError('amount harus finite');
     if (amount <= 0) throw ArgumentError('amount harus positif');
     if (amount != amount.roundToDouble()) {

@@ -84,11 +84,11 @@ void main() {
       expect(id, startsWith('generated-A-'));
       await state.addTransaction(tx(id));
       await tick();
-      expect(state.totalIncome, 1000);
+      expect(state.totalIncome, BigInt.from(1000));
       await state.updateTransaction(id, tx(id, amount: 400, income: false));
       await tick();
-      expect(state.totalIncome, 0);
-      expect(state.totalExpense, 400);
+      expect(state.totalIncome, BigInt.from(0));
+      expect(state.totalExpense, BigInt.from(400));
       await state.deleteTransaction(id);
       await tick();
       expect(state.transactions, isEmpty);

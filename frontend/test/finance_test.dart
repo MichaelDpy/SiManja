@@ -70,11 +70,11 @@ void main() {
     final ref = DateTime(2026, 11, 15);
 
     test('totalIncome = 0 saat daftar kosong', () {
-      expect(FinanceSummary.totalIncome([]), 0.0);
+      expect(FinanceSummary.totalIncome([]), BigInt.from(0));
     });
 
     test('totalExpense = 0 saat daftar kosong', () {
-      expect(FinanceSummary.totalExpense([]), 0.0);
+      expect(FinanceSummary.totalExpense([]), BigInt.from(0));
     });
 
     test('totalIncome hanya menjumlah isIncome=true', () {
@@ -83,7 +83,7 @@ void main() {
         _tx(id: '2', amount: 1_000_000, isIncome: false, date: ref),
         _tx(id: '3', amount: 3_000_000, isIncome: true, date: ref),
       ];
-      expect(FinanceSummary.totalIncome(txs), 8_000_000.0);
+      expect(FinanceSummary.totalIncome(txs), BigInt.from(8_000_000));
     });
 
     test('totalExpense hanya menjumlah isIncome=false', () {
@@ -92,7 +92,7 @@ void main() {
         _tx(id: '2', amount: 1_200_000, isIncome: false, date: ref),
         _tx(id: '3', amount: 800_000, isIncome: false, date: ref),
       ];
-      expect(FinanceSummary.totalExpense(txs), 2_000_000.0);
+      expect(FinanceSummary.totalExpense(txs), BigInt.from(2_000_000));
     });
 
     test('netCashFlow positif saat pemasukan > pengeluaran', () {
@@ -100,7 +100,7 @@ void main() {
         _tx(id: '1', amount: 8_000_000, isIncome: true, date: ref),
         _tx(id: '2', amount: 3_000_000, isIncome: false, date: ref),
       ];
-      expect(FinanceSummary.netCashFlow(txs), 5_000_000.0);
+      expect(FinanceSummary.netCashFlow(txs), BigInt.from(5_000_000));
     });
 
     test('netCashFlow negatif saat pengeluaran > pemasukan', () {
@@ -108,7 +108,7 @@ void main() {
         _tx(id: '1', amount: 2_000_000, isIncome: true, date: ref),
         _tx(id: '2', amount: 5_000_000, isIncome: false, date: ref),
       ];
-      expect(FinanceSummary.netCashFlow(txs), -3_000_000.0);
+      expect(FinanceSummary.netCashFlow(txs), BigInt.from(-3_000_000));
     });
   });
 
@@ -243,8 +243,8 @@ void main() {
       // indeks 2 = Agu (Jun=0, Jul=1, Agu=2)
       final aug = series[2];
       expect(aug.month, 8);
-      expect(aug.income, 0.0);
-      expect(aug.expense, 0.0);
+      expect(aug.income, BigInt.from(0));
+      expect(aug.expense, BigInt.from(0));
     });
 
     test('wrap tahun: Feb 2026, 3 bulan → Des 2025, Jan 2026, Feb 2026', () {
@@ -268,9 +268,9 @@ void main() {
         '2026-1',
         '2026-2',
       ]);
-      expect(series[0].income, 5000.0);
-      expect(series[1].income, 3000.0);
-      expect(series[2].income, 2000.0);
+      expect(series[0].income, BigInt.from(5000));
+      expect(series[1].income, BigInt.from(3000));
+      expect(series[2].income, BigInt.from(2000));
     });
 
     test('MonthlySummary.shortLabel benar untuk semua 12 bulan', () {
@@ -278,8 +278,8 @@ void main() {
         return MonthlySummary(
           year: 2026,
           month: i + 1,
-          income: 0,
-          expense: 0,
+          income: BigInt.zero,
+          expense: BigInt.zero,
         ).shortLabel;
       });
       expect(labels, [
@@ -334,8 +334,8 @@ void main() {
       ];
       final result = FinanceSummary.expenseByCategory(txs);
       expect(result.keys.first, 'Tagihan');
-      expect(result['Tagihan'], 1_200_000.0);
-      expect(result['Makan & Minum'], 300_000.0);
+      expect(result['Tagihan'], BigInt.from(1_200_000));
+      expect(result['Makan & Minum'], BigInt.from(300_000));
     });
   });
 

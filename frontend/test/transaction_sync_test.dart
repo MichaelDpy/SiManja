@@ -126,7 +126,7 @@ void main() {
       await tester.enterText(input('Jumlah (Rp)'), '150000');
       await click(find.widgetWithText(ElevatedButton, 'Simpan Perubahan'));
       expect(state.transactions.single.id, id);
-      expect(state.totalIncome, 150000);
+      expect(state.totalIncome, BigInt.from(150000));
       await tab('Profil');
       final name = find.byKey(const Key('profile-name'));
       await tester.ensureVisible(name);
@@ -142,7 +142,7 @@ void main() {
       await login('a@example.com');
       expect(state.name, 'Nama akun presentasi');
       expect(state.transactions.single.id, id);
-      expect(state.totalIncome, 150000);
+      expect(state.totalIncome, BigInt.from(150000));
       await tab('Transaksi');
       // Spinner hapus tetap aktif selama dialog konfirmasi terbuka.
       await tester.tap(find.byIcon(Icons.delete_outline).hitTestable());

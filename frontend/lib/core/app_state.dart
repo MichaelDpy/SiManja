@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import 'finance_summary.dart';
 import 'mock_data.dart';
 import '../models/user_profile.dart';
 import '../repositories/profile_repository.dart';
@@ -251,11 +252,9 @@ class AppState extends ChangeNotifier {
 
   // ── Computed ───────────────────────────────────────────────────────────
 
-  double get totalIncome =>
-      _transactions.where((t) => t.isIncome).fold(0.0, (s, t) => s + t.amount);
+  BigInt get totalIncome => FinanceSummary.totalIncome(_transactions);
 
-  double get totalExpense =>
-      _transactions.where((t) => !t.isIncome).fold(0.0, (s, t) => s + t.amount);
+  BigInt get totalExpense => FinanceSummary.totalExpense(_transactions);
 
   // ── Profil actions ─────────────────────────────────────────────────────
 

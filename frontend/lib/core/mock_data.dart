@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+import 'finance_summary.dart';
 import '../models/transaction_model.dart';
 
 // Re-export agar import lama (import '../core/mock_data.dart') tetap valid.
@@ -400,11 +401,9 @@ class MockData {
 
   static double get totalAssets => assets.fold(0, (sum, a) => sum + a.value);
 
-  static double get totalIncome =>
-      transactions.where((t) => t.isIncome).fold(0.0, (s, t) => s + t.amount);
+  static BigInt get totalIncome => FinanceSummary.totalIncome(transactions);
 
-  static double get totalExpense =>
-      transactions.where((t) => !t.isIncome).fold(0.0, (s, t) => s + t.amount);
+  static BigInt get totalExpense => FinanceSummary.totalExpense(transactions);
 
-  static double get netBalance => totalIncome - totalExpense;
+  static BigInt get netBalance => totalIncome - totalExpense;
 }

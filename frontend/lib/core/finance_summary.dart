@@ -1,3 +1,4 @@
+import 'rupiah.dart';
 import '../models/transaction_model.dart';
 
 /// Utilitas laporan keuangan SIMANJA.
@@ -41,15 +42,17 @@ abstract final class FinanceSummary {
   // ── Agregasi ─────────────────────────────────────────────────────────────
 
   /// Total pemasukan dari daftar transaksi.
-  static double totalIncome(List<TransactionModel> txList) =>
-      txList.where((t) => t.isIncome).fold(0.0, (s, t) => s + t.amount);
+  static BigInt totalIncome(List<TransactionModel> txList) => txList
+      .where((t) => t.isIncome)
+      .fold(BigInt.zero, (s, t) => s + Rupiah.exact(t.amount));
 
   /// Total pengeluaran dari daftar transaksi.
-  static double totalExpense(List<TransactionModel> txList) =>
-      txList.where((t) => !t.isIncome).fold(0.0, (s, t) => s + t.amount);
+  static BigInt totalExpense(List<TransactionModel> txList) => txList
+      .where((t) => !t.isIncome)
+      .fold(BigInt.zero, (s, t) => s + Rupiah.exact(t.amount));
 
   /// Arus kas bersih = pemasukan − pengeluaran.
-  static double netCashFlow(List<TransactionModel> txList) =>
+  static BigInt netCashFlow(List<TransactionModel> txList) =>
       totalIncome(txList) - totalExpense(txList);
 
   /// Rasio tabungan = (pemasukan − pengeluaran) / pemasukan × 100.
@@ -58,7 +61,7 @@ abstract final class FinanceSummary {
   /// Nilai negatif sah (pengeluaran melebihi pemasukan).
   static double? savingsRate(List<TransactionModel> txList) {
     final inc = totalIncome(txList);
-    if (inc == 0) return null;
+    if (inc == BigInt.zero) return null;
     return (inc - totalExpense(txList)) / inc * 100;
   }
 
@@ -66,10 +69,11 @@ abstract final class FinanceSummary {
 
   /// Pengeluaran dikelompokkan per kategori.
   /// Urutan: nilai terbesar dulu.
-  static Map<String, double> expenseByCategory(List<TransactionModel> txList) {
-    final map = <String, double>{};
+  static Map<String, BigInt> expenseByCategory(List<TransactionModel> txList) {
+    final map = <String, BigInt>{};
     for (final t in txList.where((t) => !t.isIncome)) {
-      map[t.category] = (map[t.category] ?? 0) + t.amount;
+      map[t.category] =
+          (map[t.category] ?? BigInt.zero) + Rupiah.exact(t.amount);
     }
     final sorted = map.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -133,8 +137,8 @@ abstract final class FinanceSummary {
 class MonthlySummary {
   final int year;
   final int month;
-  final double income;
-  final double expense;
+  final BigInt income;
+  final BigInt expense;
 
   const MonthlySummary({
     required this.year,
@@ -165,7 +169,7 @@ class MonthlySummary {
   /// Label bulan + tahun, mis. "Sep 2026".
   String get fullLabel => '$shortLabel $year';
 
-  double get netCashFlow => income - expense;
+  BigInt get netCashFlow => income - expense;
 
   @override
   String toString() => 'MonthlySummary($fullLabel, inc:$income, exp:$expense)';

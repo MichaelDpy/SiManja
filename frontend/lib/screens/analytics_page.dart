@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../core/rupiah.dart';
 import '../core/app_state.dart';
 import '../core/finance_summary.dart';
 import '../core/theme.dart';
@@ -99,22 +100,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  double get _totalIncome => FinanceSummary.totalIncome(_rangeTx);
-  double get _totalExpense => FinanceSummary.totalExpense(_rangeTx);
-  double get _netSavings => _totalIncome - _totalExpense;
+  BigInt get _totalIncome => FinanceSummary.totalIncome(_rangeTx);
+  BigInt get _totalExpense => FinanceSummary.totalExpense(_rangeTx);
+  BigInt get _netSavings => _totalIncome - _totalExpense;
   double? get _savingsRate => FinanceSummary.savingsRate(_rangeTx);
 
-  double get _avgIncome {
-    final sum = _series.fold(0.0, (s, m) => s + m.income);
-    return sum / _monthCount;
+  BigInt get _avgIncome {
+    final sum = _series.fold(BigInt.zero, (s, m) => s + m.income);
+    return Rupiah.average(sum, _monthCount);
   }
 
-  double get _avgExpense {
-    final sum = _series.fold(0.0, (s, m) => s + m.expense);
-    return sum / _monthCount;
+  BigInt get _avgExpense {
+    final sum = _series.fold(BigInt.zero, (s, m) => s + m.expense);
+    return Rupiah.average(sum, _monthCount);
   }
 
-  Map<String, double> get _expenseByCategory =>
+  Map<String, BigInt> get _expenseByCategory =>
       FinanceSummary.expenseByCategory(_rangeTx);
 
   // ── Navigasi periode ──────────────────────────────────────────────────
@@ -232,19 +233,19 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         final cards = [
           _MetricCard(
             label: 'Rata-rata Pemasukan/Bln',
-            value: _currencyFmt.format(_avgIncome),
+            value: _currencyFmt.rupiah(_avgIncome),
             icon: Icons.arrow_downward,
             color: AppColors.income,
           ),
           _MetricCard(
             label: 'Rata-rata Pengeluaran/Bln',
-            value: _currencyFmt.format(_avgExpense),
+            value: _currencyFmt.rupiah(_avgExpense),
             icon: Icons.arrow_upward,
             color: AppColors.expense,
           ),
           _MetricCard(
             label: 'Tabungan Bersih',
-            value: _currencyFmt.format(_netSavings),
+            value: _currencyFmt.rupiah(_netSavings),
             icon: Icons.savings_outlined,
             color: AppColors.teal,
           ),
@@ -300,7 +301,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     // maxY dari max(income, expense) semua bulan; fallback 1 jika semua nol
     final maxVal = series.fold<double>(
       1,
-      (m, s) => [m, s.income, s.expense].reduce((a, b) => a > b ? a : b),
+      (m, s) => [
+        m,
+        s.income.toDouble(),
+        s.expense.toDouble(),
+      ].reduce((a, b) => a > b ? a : b),
     );
     final chartMax = maxVal * 1.25;
     // interval tidak boleh nol — fl_chart crash jika nol
@@ -385,7 +390,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                               ),
                             ),
                             TextSpan(
-                              text: _currencyFmt.format(val),
+                              text: _currencyFmt.rupiah(val),
                               style: GoogleFonts.lato(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -453,13 +458,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       x: e.key,
                       barRods: [
                         BarChartRodData(
-                          toY: m.income,
+                          toY: m.income.toDouble(),
                           color: AppColors.income,
                           width: 10,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         BarChartRodData(
-                          toY: m.expense,
+                          toY: m.expense.toDouble(),
                           color: AppColors.expense,
                           width: 10,
                           borderRadius: BorderRadius.circular(4),
@@ -478,10 +483,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   // ── Expense Breakdown ─────────────────────────────────────────────────
 
-  Widget _buildExpenseBreakdown(Map<String, double> expCat, bool hasData) {
+  Widget _buildExpenseBreakdown(Map<String, BigInt> expCat, bool hasData) {
     final cs = Theme.of(context).colorScheme;
     final maxVal = expCat.isEmpty
-        ? 1.0
+        ? BigInt.one
         : expCat.values.reduce((a, b) => a > b ? a : b);
 
     return Container(
@@ -566,7 +571,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     SizedBox(
                       width: 80,
                       child: Text(
-                        _currencyFmt.format(val),
+                        _currencyFmt.rupiah(val),
                         style: GoogleFonts.lato(
                           color: cs.onSurface,
                           fontSize: 10,
@@ -592,11 +597,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
     // Nilai tabungan per bulan
     final spots = series.asMap().entries.map((e) {
-      return FlSpot(e.key.toDouble(), e.value.netCashFlow);
+      return FlSpot(e.key.toDouble(), e.value.netCashFlow.toDouble());
     }).toList();
 
     // maxY / minY — tangani semua nilai nol dan nilai negatif
-    final values = series.map((m) => m.netCashFlow).toList();
+    final values = series.map((m) => m.netCashFlow.toDouble()).toList();
     final maxV = values.reduce((a, b) => a > b ? a : b);
     final minV = values.reduce((a, b) => a < b ? a : b);
     final range = (maxV - minV).abs();
@@ -667,7 +672,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           ),
                           children: [
                             TextSpan(
-                              text: _currencyFmt.format(s.y),
+                              text: _currencyFmt.rupiah(m.netCashFlow),
                               style: GoogleFonts.lato(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,

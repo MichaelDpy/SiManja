@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../core/rupiah.dart';
 import '../core/app_state.dart';
 import '../core/mock_data.dart';
 import '../core/theme.dart';
@@ -626,7 +627,7 @@ class _TxListState extends State<_TxList> {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerRight,
                         child: Text(
-                          '$sign${_currencyFmt.format(tx.amount)}',
+                          '$sign${_currencyFmt.rupiah(tx.amount)}',
                           style: GoogleFonts.lato(
                             color: amtColor,
                             fontSize: 13,

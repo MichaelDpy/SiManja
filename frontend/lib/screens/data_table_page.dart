@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../core/rupiah.dart';
 import '../core/app_state.dart';
 import '../core/csv_exporter.dart';
 import '../core/finance_summary.dart';
@@ -144,9 +145,9 @@ class _DataTablePageState extends State<DataTablePage> {
 
   // ── Ringkasan mengikuti filter aktif ──────────────────────────────────
 
-  double get _summaryIncome => FinanceSummary.totalIncome(_periodFiltered);
-  double get _summaryExpense => FinanceSummary.totalExpense(_periodFiltered);
-  double get _summaryNet => FinanceSummary.netCashFlow(_periodFiltered);
+  BigInt get _summaryIncome => FinanceSummary.totalIncome(_periodFiltered);
+  BigInt get _summaryExpense => FinanceSummary.totalExpense(_periodFiltered);
+  BigInt get _summaryNet => FinanceSummary.netCashFlow(_periodFiltered);
 
   // ── Pilihan periode (bulan-bulan yang ada di data + "Semua") ──────────
 
@@ -341,19 +342,19 @@ class _DataTablePageState extends State<DataTablePage> {
             children: [
               _SummaryPill(
                 label: 'Pemasukan',
-                value: _currencyFmt.format(_summaryIncome),
+                value: _currencyFmt.rupiah(_summaryIncome),
                 color: AppColors.income,
               ),
               const SizedBox(width: 6),
               _SummaryPill(
                 label: 'Pengeluaran',
-                value: _currencyFmt.format(_summaryExpense),
+                value: _currencyFmt.rupiah(_summaryExpense),
                 color: AppColors.expense,
               ),
               const SizedBox(width: 6),
               _SummaryPill(
                 label: 'Selisih',
-                value: _currencyFmt.format(_summaryNet),
+                value: _currencyFmt.rupiah(_summaryNet),
                 color: AppColors.teal,
               ),
             ],
@@ -613,7 +614,7 @@ class _DataTablePageState extends State<DataTablePage> {
                             SizedBox(
                               width: 140,
                               child: Text(
-                                '$sign${_currencyFmt.format(signed.abs())}',
+                                '$sign${_currencyFmt.rupiah(signed.abs())}',
                                 style: GoogleFonts.lato(
                                   color: amtColor,
                                   fontSize: 12,
@@ -812,14 +813,14 @@ class _HeaderCell extends StatelessWidget {
 // ── Table Footer ──────────────────────────────────────────────────────────
 
 class _TableFooter extends StatelessWidget {
-  final double net;
+  final BigInt net;
   final String periodLabel;
 
   const _TableFooter({required this.net, required this.periodLabel});
 
   @override
   Widget build(BuildContext context) {
-    final netPositive = net >= 0;
+    final netPositive = net >= BigInt.zero;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
@@ -843,7 +844,7 @@ class _TableFooter extends StatelessWidget {
           SizedBox(
             width: 140,
             child: Text(
-              '${netPositive ? '+' : '−'}${_currencyFmt.format(net.abs())}',
+              '${netPositive ? '+' : '−'}${_currencyFmt.rupiah(net.abs())}',
               style: GoogleFonts.lato(
                 color: netPositive ? AppColors.income : AppColors.expense,
                 fontSize: 13,

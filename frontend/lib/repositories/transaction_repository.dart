@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/rupiah.dart';
 import '../models/transaction_model.dart';
 
 class TransactionSnapshot {
@@ -25,7 +26,7 @@ abstract interface class TransactionRepository {
 }
 
 abstract final class TransactionMapper {
-  static const maxRupiah = 9007199254740991;
+  static const maxRupiah = Rupiah.maxRecord;
 
   static void validateId(String id) {
     if (id.trim().isEmpty ||

@@ -5,6 +5,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../core/rupiah.dart';
 import '../core/theme.dart';
 import '../core/mock_data.dart';
 import '../core/app_state.dart';
@@ -76,35 +77,35 @@ class InAppNotificationItem {
         color: latest.isIncome ? AppColors.income : AppColors.expense,
         title: latest.isIncome ? 'Pemasukan Terakhir' : 'Pengeluaran Terakhir',
         subtitle:
-            '${latest.description} (${latest.category}) sebesar ${fmt.format(latest.amount)}',
+            '${latest.description} (${latest.category}) sebesar ${fmt.rupiah(latest.amount)}',
         time: formattedDate,
       ),
     );
 
     // 2. Status Arus Kas Periode Ini
-    if (netCashFlow < 0) {
+    if (netCashFlow < BigInt.zero) {
       list.add(
         InAppNotificationItem(
           icon: Icons.warning_amber_rounded,
           color: AppColors.expense,
           title: 'Defisit Arus Kas',
           subtitle:
-              'Pengeluaran (${fmt.format(totalExpense)}) melebihi pemasukan (${fmt.format(totalIncome)}).',
+              'Pengeluaran (${fmt.rupiah(totalExpense)}) melebihi pemasukan (${fmt.rupiah(totalIncome)}).',
           time: periodLabel,
         ),
       );
-    } else if (netCashFlow > 0) {
+    } else if (netCashFlow > BigInt.zero) {
       list.add(
         InAppNotificationItem(
           icon: Icons.trending_up,
           color: AppColors.income,
           title: 'Surplus Arus Kas',
           subtitle:
-              'Arus kas positif +${fmt.format(netCashFlow)} tercatat pada periode ini.',
+              'Arus kas positif +${fmt.rupiah(netCashFlow)} tercatat pada periode ini.',
           time: periodLabel,
         ),
       );
-    } else if (totalIncome > 0 && totalExpense > 0) {
+    } else if (totalIncome > BigInt.zero && totalExpense > BigInt.zero) {
       list.add(
         InAppNotificationItem(
           icon: Icons.balance,
@@ -126,7 +127,7 @@ class InAppNotificationItem {
           color: meta.color,
           title: 'Pengeluaran Terbesar: ${top.key}',
           subtitle:
-              'Total ${fmt.format(top.value)} dialokasikan untuk kategori ${top.key}.',
+              'Total ${fmt.rupiah(top.value)} dialokasikan untuk kategori ${top.key}.',
           time: periodLabel,
         ),
       );
@@ -841,16 +842,16 @@ class _DashboardPageState extends State<DashboardPage> {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          netCashFlow > 0
-                              ? '+${_fmt.format(netCashFlow)}'
-                              : (netCashFlow < 0
-                                    ? '-${_fmt.format(netCashFlow.abs())}'
-                                    : _fmt.format(0)),
+                          netCashFlow > BigInt.zero
+                              ? '+${_fmt.rupiah(netCashFlow)}'
+                              : (netCashFlow < BigInt.zero
+                                    ? '-${_fmt.rupiah(netCashFlow.abs())}'
+                                    : _fmt.rupiah(0)),
                           style: tt.headlineMedium?.copyWith(
                             fontWeight: FontWeight.w800,
-                            color: netCashFlow > 0
+                            color: netCashFlow > BigInt.zero
                                 ? AppColors.income
-                                : (netCashFlow < 0
+                                : (netCashFlow < BigInt.zero
                                       ? AppColors.expense
                                       : cs.onSurface),
                           ),
@@ -867,7 +868,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           Expanded(
                             child: _BalanceStat(
                               label: 'Pemasukan',
-                              value: _fmt.format(totalIncome),
+                              value: _fmt.rupiah(totalIncome),
                               color: AppColors.income,
                               icon: Icons.arrow_downward,
                             ),
@@ -876,7 +877,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           Expanded(
                             child: _BalanceStat(
                               label: 'Pengeluaran',
-                              value: _fmt.format(totalExpense),
+                              value: _fmt.rupiah(totalExpense),
                               color: AppColors.expense,
                               icon: Icons.arrow_upward,
                             ),
@@ -1610,7 +1611,7 @@ class _TransactionTile extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
                   child: Text(
-                    '$sign${fmt.format(tx.amount)}',
+                    '$sign${fmt.rupiah(tx.amount)}',
                     style: tt.bodyMedium?.copyWith(
                       color: amountColor,
                       fontWeight: FontWeight.w700,
