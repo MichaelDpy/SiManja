@@ -5,6 +5,7 @@ import '../core/session_controller.dart';
 import '../core/firebase_bootstrap.dart';
 import '../repositories/profile_repository.dart';
 import '../repositories/transaction_repository.dart';
+import '../widgets/email_verification_banner.dart';
 import '../widgets/transaction_sync_status.dart';
 import '../services/auth_service.dart';
 import '../widgets/session_scope.dart';
@@ -216,17 +217,51 @@ class _SessionGateState extends State<SessionGate> {
         ),
       );
     }
+    final uid = session.user!.uid;
+    final syncVisible =
+        state.pendingMutations > 0 ||
+        state.transactionsHasPendingWrites ||
+        state.transactionsFromCache ||
+        state.transactionsError != null;
+    final verifyVisible = needsEmailVerification(session.user);
+    final noticesVisible = syncVisible || verifyVisible;
     return SessionScope(
       controller: session,
       child: Column(
         children: [
-          TransactionSyncStatus(state: state),
+          // Pemberitahuan atas berbagi satu safe area. Saat tampil, padding
+          // atas halaman di bawahnya dihapus agar tidak ada jarak ganda;
+          // struktur pohon tetap sama sehingga state tab tidak hilang.
+          if (noticesVisible)
+            SafeArea(
+              bottom: false,
+              child: MediaQuery.removePadding(
+                context: context,
+                removeTop: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (syncVisible) TransactionSyncStatus(state: state),
+                    if (verifyVisible)
+                      EmailVerificationBanner(
+                        key: ValueKey('verify-$uid'),
+                        session: session,
+                      ),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
-            child: KeyedSubtree(
-              key: ValueKey(session.user!.uid),
-              child: widget.homeBuilder == null
-                  ? const MainShell()
-                  : Builder(builder: widget.homeBuilder!),
+            key: const ValueKey('session-body'),
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: noticesVisible,
+              child: KeyedSubtree(
+                key: ValueKey(uid),
+                child: widget.homeBuilder == null
+                    ? const MainShell()
+                    : Builder(builder: widget.homeBuilder!),
+              ),
             ),
           ),
         ],

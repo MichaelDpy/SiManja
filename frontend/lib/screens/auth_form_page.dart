@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/firebase_bootstrap.dart';
 import '../services/auth_service.dart';
@@ -20,6 +21,20 @@ class _AuthFormPageState extends State<AuthFormPage> {
   bool _obscure = true;
   String? _message;
   bool _success = false;
+  bool _prefilled = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Email dari halaman login dibawa sekali sebagai nilai awal.
+    if (_prefilled) return;
+    _prefilled = true;
+    final initial = ModalRoute.of(context)?.settings.arguments;
+    if (initial is String && initial.isNotEmpty && _email.text.isEmpty) {
+      _email.text = initial;
+    }
+  }
+
   @override
   void dispose() {
     _email.dispose();
@@ -38,7 +53,21 @@ class _AuthFormPageState extends State<AuthFormPage> {
     try {
       final auth = widget.auth ?? AuthService.instance;
       if (widget.register) {
+        // Kebijakan password project (bila dapat diambil) diperiksa sebelum
+        // akun dibuat; server Auth tetap penentu akhir.
+        final check = await auth.checkPassword(_password.text);
+        if (!check.isValid) {
+          if (mounted) {
+            setState(() {
+              _message =
+                  'Password belum memenuhi kebijakan: '
+                  '${check.unmet.join(', ')}.';
+            });
+          }
+          return;
+        }
         await auth.signUp(_email.text, _password.text);
+        TextInput.finishAutofillContext();
         if (mounted) {
           Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
         }
@@ -47,9 +76,11 @@ class _AuthFormPageState extends State<AuthFormPage> {
         if (mounted) {
           setState(() {
             _success = true;
+            // Pesan sama untuk email terdaftar maupun tidak (tanpa enumerasi).
             _message = FirebaseBootstrap.useEmulators
-                ? 'Permintaan pemulihan berhasil. Pada mode pengembangan, '
-                      'tautan pemulihan tersedia di Auth Emulator.'
+                ? 'Permintaan pemulihan diproses. Pada mode pengembangan, '
+                      'tautan pemulihan tersedia di Auth Emulator, bukan '
+                      'dikirim ke email sungguhan.'
                 : 'Jika email terdaftar, tautan pemulihan akan dikirim. '
                       'Periksa kotak masuk dan folder spam.';
           });
@@ -109,11 +140,13 @@ class _AuthFormPageState extends State<AuthFormPage> {
                         obscureText: _obscure,
                         autofillHints: const [AutofillHints.newPassword],
                         textInputAction: TextInputAction.next,
-                        validator: (v) => v == null || v.isEmpty
-                            ? 'Password wajib diisi'
-                            : null,
+                        validator: validateNewPassword,
                         decoration: InputDecoration(
                           labelText: 'Password',
+                          helperText:
+                              'Minimal $firebaseMinPasswordLength karakter. '
+                              'Kebijakan project dapat menambah syarat.',
+                          helperMaxLines: 2,
                           suffixIcon: IconButton(
                             tooltip: _obscure
                                 ? 'Tampilkan password'

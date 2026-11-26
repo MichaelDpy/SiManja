@@ -31,6 +31,34 @@ class ControlledAuth implements AuthGateway {
   Future<void> resetPassword(String email) => _request('reset', email);
   @override
   Future<void> signOut() => _request('signOut', '');
+
+  /// Persyaratan tambahan dari "kebijakan project" untuk tes B03.
+  List<String> serverUnmet = const [];
+  int checks = 0;
+
+  @override
+  SessionUser? get currentUser => null;
+  @override
+  Future<PasswordCheck> checkPassword(String password) async {
+    checks++;
+    return PasswordCheck([
+      ...localPasswordIssues(password),
+      ...serverUnmet,
+    ], fromServerPolicy: serverUnmet.isNotEmpty);
+  }
+
+  @override
+  Future<void> sendEmailVerification() async {}
+  @override
+  Future<SessionUser?> reloadUser() async => null;
+  @override
+  Future<ReauthGrant> reauthenticateWithPassword(
+    String password,
+    SensitiveOperation operation,
+  ) => throw UnimplementedError();
+  @override
+  Future<void> changePassword(ReauthGrant grant, String newPassword) =>
+      throw UnimplementedError();
 }
 
 Future<void> pumpPage(
@@ -250,6 +278,85 @@ void main() {
       find.textContaining('tautan pemulihan tersedia di Auth Emulator'),
       findsOneWidget,
     );
+    expect(find.text('Home tes'), findsNothing);
+  });
+
+  testWidgets('B03: password di bawah batas Firebase berhenti di field', (
+    tester,
+  ) async {
+    final auth = ControlledAuth();
+    await pumpPage(tester, auth, register: true);
+    await tester.enterText(find.byKey(const Key('auth-email')), 'a@b.co');
+    await tester.enterText(find.byKey(const Key('auth-password')), '12345');
+    await tester.enterText(find.byKey(const Key('auth-confirm')), '12345');
+    await tapButton(tester, 'auth-submit');
+    await tester.pumpAndSettle();
+    expect(find.text('Password: Minimal 6 karakter'), findsOneWidget);
+    expect(auth.calls, isEmpty);
+    expect(auth.checks, 0);
+  });
+
+  testWidgets('B03: kebijakan project menolak sebelum akun dibuat', (
+    tester,
+  ) async {
+    final auth = ControlledAuth()..serverUnmet = ['Memuat simbol'];
+    await pumpPage(tester, auth, register: true);
+    await registerInput(tester);
+    await tapButton(tester, 'auth-submit');
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Password belum memenuhi kebijakan: Memuat simbol.'),
+      findsOneWidget,
+    );
+    expect(auth.calls, isEmpty, reason: 'signUp tidak boleh dipanggil');
+    expect(find.text('Home tes'), findsNothing);
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('auth-password')))
+          .controller!
+          .text,
+      'Password123!',
+      reason: 'input tetap untuk diperbaiki',
+    );
+  });
+
+  testWidgets('B03: email dari login terbawa ke halaman pemulihan', (
+    tester,
+  ) async {
+    final auth = ControlledAuth();
+    await pumpPage(tester, auth);
+    await tester.enterText(
+      find.byKey(const Key('login-email')),
+      ' user@example.com ',
+    );
+    await tester.ensureVisible(find.text('Lupa password?'));
+    await tester.pump();
+    await tester.tap(find.text('Lupa password?'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextFormField>(find.byKey(const Key('auth-email')))
+          .controller!
+          .text,
+      'user@example.com',
+    );
+  });
+
+  testWidgets('B03: akun dinonaktifkan dan batas percobaan dijelaskan', (
+    tester,
+  ) async {
+    final auth = ControlledAuth()
+      ..failure = FirebaseAuthException(code: 'user-disabled');
+    await pumpPage(tester, auth);
+    await loginInput(tester);
+    await tapButton(tester, 'login-submit');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Akun dinonaktifkan'), findsOneWidget);
+
+    auth.failure = FirebaseAuthException(code: 'too-many-requests');
+    await tapButton(tester, 'login-submit');
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Terlalu banyak percobaan'), findsOneWidget);
     expect(find.text('Home tes'), findsNothing);
   });
 

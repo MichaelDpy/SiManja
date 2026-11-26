@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/theme.dart';
@@ -39,6 +40,8 @@ class _LoginPageState extends State<LoginPage> {
         _emailCtrl.text,
         _passwordCtrl.text,
       );
+      // Beri tahu password manager bahwa kredensial berhasil dipakai.
+      TextInput.finishAutofillContext();
       if (mounted) {
         Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
       }
@@ -118,76 +121,78 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 28),
 
                 // ── Form ─────────────────────────────────────────────────
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      // Email field
-                      TextFormField(
-                        key: const Key('login-email'),
-                        enabled: !_isLoading,
-                        autofillHints: const [AutofillHints.email],
-                        controller: _emailCtrl,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        style: GoogleFonts.lato(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: 14,
-                        ),
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          hintText: 'contoh@email.com',
-                          prefixIcon: Icon(Icons.email_outlined),
-                        ),
-                        validator: validateEmail,
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Password field
-                      TextFormField(
-                        key: const Key('login-password'),
-                        enabled: !_isLoading,
-                        autofillHints: const [AutofillHints.password],
-                        controller: _passwordCtrl,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _login(),
-                        style: GoogleFonts.lato(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontSize: 14,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          hintText: '••••••••',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            tooltip: _obscurePassword
-                                ? 'Tampilkan password'
-                                : 'Sembunyikan password',
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                            ),
-                            onPressed: _isLoading
-                                ? null
-                                : () {
-                                    setState(
-                                      () =>
-                                          _obscurePassword = !_obscurePassword,
-                                    );
-                                  },
+                AutofillGroup(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      children: [
+                        // Email field
+                        TextFormField(
+                          key: const Key('login-email'),
+                          enabled: !_isLoading,
+                          autofillHints: const [AutofillHints.email],
+                          controller: _emailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          style: GoogleFonts.lato(
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: 14,
                           ),
+                          decoration: const InputDecoration(
+                            labelText: 'Email',
+                            hintText: 'contoh@email.com',
+                            prefixIcon: Icon(Icons.email_outlined),
+                          ),
+                          validator: validateEmail,
                         ),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) {
-                            return 'Password wajib diisi';
-                          }
-                          return null;
-                        },
-                      ),
-                    ],
+
+                        const SizedBox(height: 16),
+
+                        // Password field
+                        TextFormField(
+                          key: const Key('login-password'),
+                          enabled: !_isLoading,
+                          autofillHints: const [AutofillHints.password],
+                          controller: _passwordCtrl,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _login(),
+                          style: GoogleFonts.lato(
+                            color: Theme.of(context).colorScheme.onSurface,
+                            fontSize: 14,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            hintText: '••••••••',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              tooltip: _obscurePassword
+                                  ? 'Tampilkan password'
+                                  : 'Sembunyikan password',
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
+                              onPressed: _isLoading
+                                  ? null
+                                  : () {
+                                      setState(
+                                        () => _obscurePassword =
+                                            !_obscurePassword,
+                                      );
+                                    },
+                            ),
+                          ),
+                          validator: (v) {
+                            if (v == null || v.isEmpty) {
+                              return 'Password wajib diisi';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -238,8 +243,12 @@ class _LoginPageState extends State<LoginPage> {
                     TextButton(
                       onPressed: _isLoading
                           ? null
-                          : () =>
-                                Navigator.pushNamed(context, '/reset-password'),
+                          : () => Navigator.pushNamed(
+                              context,
+                              '/reset-password',
+                              // Email yang sudah diketik ikut ke pemulihan.
+                              arguments: _emailCtrl.text.trim(),
+                            ),
                       child: const Text('Lupa password?'),
                     ),
                     TextButton(

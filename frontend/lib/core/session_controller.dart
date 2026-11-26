@@ -47,12 +47,15 @@ class SessionController extends ChangeNotifier {
 
   void _receive(int generation, SessionUser? next) {
     if (!_isCurrent(generation)) return;
+    final previous = user;
     user = next;
     checking = false;
     error = null;
     if (next == null) {
       state.clearSession();
-    } else {
+    } else if (previous?.uid != next.uid || previous?.email != next.email) {
+      // userChanges juga memancar saat token/verifikasi berubah; data sesi
+      // hanya dimulai ulang bila identitasnya benar-benar berubah.
       unawaited(state.beginSession(next.uid, next.email));
     }
     notifyListeners();
@@ -65,6 +68,21 @@ class SessionController extends ChangeNotifier {
     error = 'Sesi belum dapat diperiksa. Periksa koneksi lalu coba lagi.';
     state.clearSession();
     notifyListeners();
+  }
+
+  /// Memuat ulang status Auth (mis. setelah pengguna membuka tautan
+  /// verifikasi). Hasil untuk UID lain atau sesi yang sudah berganti diabaikan.
+  Future<SessionUser?> refreshUser() async {
+    final before = user;
+    if (_disposed || before == null) return before;
+    final generation = _generation;
+    final fresh = await auth.reloadUser();
+    if (!_isCurrent(generation) || user?.uid != before.uid) return user;
+    if (fresh != null && fresh.uid == before.uid && fresh != user) {
+      user = fresh;
+      notifyListeners();
+    }
+    return user;
   }
 
   void retry() {

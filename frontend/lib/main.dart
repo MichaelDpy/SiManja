@@ -7,6 +7,7 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/theme.dart';
 import 'core/app_state.dart';
+import 'screens/account_security_page.dart';
 import 'screens/bootstrap_page.dart';
 import 'screens/auth_form_page.dart';
 import 'services/auth_service.dart';
@@ -93,6 +94,8 @@ class _SimanjaAppState extends State<SimanjaApp> {
       '/register' => AuthFormPage(register: true, auth: widget.auth),
       '/reset-password' => AuthFormPage(register: false, auth: widget.auth),
       '/privacy' => const PrivacyPage(),
+      // Data dari Auth; tanpa sesi halaman menampilkan ajakan masuk.
+      '/account-security' => AccountSecurityPage(auth: widget.auth),
       _ => const BootstrapPage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
