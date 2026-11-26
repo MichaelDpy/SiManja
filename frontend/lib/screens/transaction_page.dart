@@ -27,20 +27,41 @@ final _dateFmt = DateFormat('d MMM yyyy', 'id_ID');
 //   Separator desimal = koma   → "1.000,50"    berarti seribu lima puluh sen
 //
 // Parser ini MENOLAK input yang ambigu / mengandung pecahan / NaN / Infinity.
-// Contoh valid  : "1500000", "1.500.000", "1500000"
+// Contoh valid  : "1500000", "1.500.000"
 // Contoh ditolak: "1.500,50" (ada koma = ada pecahan → rupiah bukan bulat)
 //                 "abc", ""  (non-numerik)
 //                 "0"        (tidak lebih dari nol)
+//                 "1.2.3"    (titik tidak konsisten sebagai ribuan)
+
+/// Batas maksimum rupiah sesuai kontrak TransactionMapper.
+const _kMaxRupiah = 9007199254740991;
 
 /// Kembalikan nilai [double] jika [raw] adalah nominal rupiah bulat valid.
 /// Lempar [FormatException] dengan pesan Indonesia jika tidak valid.
 double parseRupiah(String raw) {
   final trimmed = raw.trim();
-  if (trimmed.isEmpty) throw FormatException('Jumlah wajib diisi');
+  if (trimmed.isEmpty) throw const FormatException('Jumlah wajib diisi');
 
   // Tolak jika ada koma (tanda desimal ID) → pasti ada pecahan
   if (trimmed.contains(',')) {
-    throw FormatException('Jumlah harus bilangan bulat rupiah (tanpa sen)');
+    throw const FormatException(
+      'Jumlah harus bilangan bulat rupiah (tanpa sen)',
+    );
+  }
+
+  // Tolak format titik ambigu: "1.2.3" atau "1.23" (bukan pemisah ribuan)
+  final dotParts = trimmed.split('.');
+  if (dotParts.length > 1) {
+    // Setiap grup setelah titik pertama harus tepat 3 digit
+    for (int i = 1; i < dotParts.length; i++) {
+      if (dotParts[i].length != 3 ||
+          !RegExp(r'^\d{3}$').hasMatch(dotParts[i])) {
+        throw const FormatException(
+          'Format tidak valid. Gunakan titik hanya sebagai pemisah ribuan '
+          '(mis. 1.500.000)',
+        );
+      }
+    }
   }
 
   // Hapus titik pemisah ribuan → "1.000.000" → "1000000"
@@ -48,19 +69,24 @@ double parseRupiah(String raw) {
 
   // Pastikan hanya digit
   if (!RegExp(r'^\d+$').hasMatch(cleaned)) {
-    throw FormatException('Jumlah hanya boleh berisi angka dan titik pemisah');
+    throw const FormatException(
+      'Jumlah hanya boleh berisi angka dan titik pemisah ribuan',
+    );
   }
 
   final value = double.tryParse(cleaned);
   if (value == null || !value.isFinite) {
-    throw FormatException('Jumlah tidak valid');
+    throw const FormatException('Jumlah tidak valid');
   }
   if (value <= 0) {
-    throw FormatException('Jumlah harus lebih dari nol');
+    throw const FormatException('Jumlah harus lebih dari nol');
   }
-  // Pastikan bulat (seharusnya sudah karena cleaned hanya digit, tapi jaga-jaga)
+  if (value > _kMaxRupiah) {
+    throw const FormatException('Jumlah melebihi batas maksimum rupiah');
+  }
+  // Pastikan bulat
   if (value != value.roundToDouble()) {
-    throw FormatException('Jumlah harus bilangan bulat rupiah');
+    throw const FormatException('Jumlah harus bilangan bulat rupiah');
   }
   return value;
 }
@@ -605,40 +631,48 @@ class _TxListState extends State<_TxList> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Tombol edit — mudah ditemukan tanpa long press
-                        InkWell(
-                          onTap: () => widget.onEdit(tx),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: Icon(
-                              Icons.edit_outlined,
-                              color: AppColors.teal,
-                              size: 16,
+                        // A12: target 48x48 minimum, label Indonesia
+                        Semantics(
+                          label: 'Edit transaksi ${tx.description}',
+                          button: true,
+                          child: InkWell(
+                            onTap: () => widget.onEdit(tx),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: Icon(
+                                Icons.edit_outlined,
+                                color: AppColors.teal,
+                                size: 16,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 4),
-                        // Tombol hapus
-                        InkWell(
-                          onTap: isDeleting ? null : () => _handleDelete(tx),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: isDeleting
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.5,
+                        // A12: target 48x48 minimum, label Indonesia
+                        Semantics(
+                          label: 'Hapus transaksi ${tx.description}',
+                          button: true,
+                          child: InkWell(
+                            onTap: isDeleting ? null : () => _handleDelete(tx),
+                            borderRadius: BorderRadius.circular(8),
+                            child: Padding(
+                              padding: const EdgeInsets.all(8),
+                              child: isDeleting
+                                  ? const SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        color: AppColors.expense,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.delete_outline,
                                       color: AppColors.expense,
+                                      size: 16,
                                     ),
-                                  )
-                                : Icon(
-                                    Icons.delete_outline,
-                                    color: AppColors.expense,
-                                    size: 16,
-                                  ),
+                            ),
                           ),
                         ),
                       ],
@@ -689,26 +723,83 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
   bool get _isEdit => widget.existing != null;
 
+  // A14: tracking apakah form sudah diubah (dirty)
+  bool _isDirty = false;
+
+  /// Periksa apakah form berbeda dari nilai awal.
+  bool _checkDirty() {
+    final ex = widget.existing;
+    if (ex == null) {
+      return _descCtrl.text.trim().isNotEmpty ||
+          _amountCtrl.text.trim().isNotEmpty;
+    }
+    return _descCtrl.text.trim() != ex.description ||
+        _amountCtrl.text.trim() != ex.amount.toStringAsFixed(0) ||
+        _selectedDate != ex.date ||
+        (_selectedCategory != null && _selectedCategory!.name != ex.category);
+  }
+
   @override
   void initState() {
     super.initState();
     final ex = widget.existing;
     _descCtrl = TextEditingController(text: ex?.description ?? '');
-    // Tampilkan angka tanpa separator saat edit agar parser tidak bingung
     _amountCtrl = TextEditingController(
       text: ex != null ? ex.amount.toStringAsFixed(0) : '',
     );
     _selectedDate = ex?.date ?? DateTime.now();
     if (ex != null) {
-      _selectedCategory = CategoryMeta.knownCategories.firstWhere(
-        (c) => c.name == ex.category,
-        orElse: () => CategoryMeta.knownCategories.first,
-      );
+      final match = CategoryMeta.knownCategories
+          .where((c) => c.name == ex.category)
+          .firstOrNull;
+      _selectedCategory = match;
+      _unknownCategory = match == null ? ex.category : null;
     }
+    // A14: tandai dirty saat teks berubah
+    _descCtrl.addListener(_onFieldChanged);
+    _amountCtrl.addListener(_onFieldChanged);
   }
+
+  void _onFieldChanged() {
+    final dirty = _checkDirty();
+    if (dirty != _isDirty) setState(() => _isDirty = dirty);
+  }
+
+  // A14: tampilkan konfirmasi buang perubahan — dipanggil synchronous
+  // agar tidak melanggar use_build_context_synchronously.
+  void _confirmDiscard() {
+    showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Buang perubahan?'),
+        content: const Text('Perubahan yang belum disimpan akan hilang.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Lanjut Edit'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              'Buang',
+              style: TextStyle(color: Theme.of(ctx).colorScheme.error),
+            ),
+          ),
+        ],
+      ),
+    ).then((shouldDiscard) {
+      if (shouldDiscard == true && mounted) Navigator.pop(context);
+    });
+  }
+
+  /// Nama kategori dari transaksi lama yang tidak ada di daftar saat ini.
+  /// null = semua dikenal.
+  String? _unknownCategory;
 
   @override
   void dispose() {
+    _descCtrl.removeListener(_onFieldChanged);
+    _amountCtrl.removeListener(_onFieldChanged);
     _descCtrl.dispose();
     _amountCtrl.dispose();
     super.dispose();
@@ -732,7 +823,12 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       locale: const Locale('id', 'ID'),
       builder: (ctx, child) => Theme(data: Theme.of(ctx), child: child!),
     );
-    if (picked != null && mounted) setState(() => _selectedDate = picked);
+    if (picked != null && mounted) {
+      setState(() {
+        _selectedDate = picked;
+        _isDirty = _checkDirty();
+      });
+    }
   }
 
   // ── Kategori ──────────────────────────────────────────────────────────
@@ -862,300 +958,366 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
     return SafeArea(
       bottom: false,
-      child: Container(
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        // Tinggi max: 92% layar; min: sisakan ruang keyboard
-        constraints: BoxConstraints(maxHeight: mq.size.height * 0.92),
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 16,
-            bottom: mq.viewInsets.bottom + mq.padding.bottom + 16,
+      child: PopScope(
+        // A14: intersep Back/swipe saat form dirty dan belum simpan
+        canPop: !_isDirty || _saving,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          _confirmDiscard();
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Handle bar
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).dividerColor,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-
-                // Judul
-                Row(
-                  children: [
-                    Text(
-                      _isEdit ? 'Edit Transaksi' : 'Tambah Transaksi',
-                      style: GoogleFonts.lato(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface,
+          constraints: BoxConstraints(maxHeight: mq.size.height * 0.92),
+          child: Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 16,
+              bottom: mq.viewInsets.bottom + mq.padding.bottom + 16,
+            ),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).dividerColor,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
+                  ),
 
-                // Konten bisa di-scroll
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Error banner
-                        if (_saveError != null)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: cs.errorContainer,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.error_outline,
-                                    color: cs.error,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      _saveError!,
-                                      style: GoogleFonts.lato(
-                                        color: cs.onErrorContainer,
-                                        fontSize: 12,
+                  // Judul
+                  Row(
+                    children: [
+                      Text(
+                        _isEdit ? 'Edit Transaksi' : 'Tambah Transaksi',
+                        style: GoogleFonts.lato(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Konten bisa di-scroll
+                  Flexible(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Error banner
+                          if (_saveError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: cs.errorContainer,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: cs.error,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _saveError!,
+                                        style: GoogleFonts.lato(
+                                          color: cs.onErrorContainer,
+                                          fontSize: 12,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
 
-                        // ── Kategori ────────────────────────────────
-                        Text(
-                          'Kategori',
-                          style: GoogleFonts.lato(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
+                          // ── Kategori ────────────────────────────────
+                          Text(
+                            'Kategori',
+                            style: GoogleFonts.lato(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        // DropdownButtonFormField.value deprecated in 3.33+;
-                        // gunakan FormField + DropdownButton untuk controlled state.
-                        FormField<CategoryMeta>(
-                          initialValue: _selectedCategory,
-                          validator: (v) => v == null
-                              ? 'Pilih kategori terlebih dahulu'
-                              : null,
-                          builder: (field) {
-                            return InputDecorator(
-                              decoration: InputDecoration(
-                                prefixIcon: const Icon(Icons.category_outlined),
-                                errorText: field.errorText,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 0,
-                                  vertical: 4,
+                          const SizedBox(height: 6),
+                          // A02: Kategori tak dikenal ditampilkan sebagai hint,
+                          // tidak di-fallback diam-diam ke pilihan pertama.
+                          if (_unknownCategory != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: cs.errorContainer.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.warning_amber_rounded,
+                                      color: cs.error,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        'Kategori "$_unknownCategory" tidak dikenal. '
+                                        'Pilih kategori baru untuk melanjutkan.',
+                                        style: GoogleFonts.lato(
+                                          color: cs.onErrorContainer,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              child: DropdownButton<CategoryMeta>(
-                                value: _selectedCategory,
-                                isExpanded: true,
-                                underline: const SizedBox.shrink(),
-                                dropdownColor: cs.surface,
-                                style: GoogleFonts.lato(
-                                  color: cs.onSurface,
-                                  fontSize: 13,
+                            ),
+                          // DropdownButtonFormField.value deprecated in 3.33+;
+                          // gunakan FormField + DropdownButton untuk controlled state.
+                          FormField<CategoryMeta>(
+                            initialValue: _selectedCategory,
+                            validator: (v) => v == null
+                                ? 'Pilih kategori terlebih dahulu'
+                                : null,
+                            builder: (field) {
+                              return InputDecorator(
+                                decoration: InputDecoration(
+                                  prefixIcon: const Icon(
+                                    Icons.category_outlined,
+                                  ),
+                                  errorText: field.errorText,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 0,
+                                    vertical: 4,
+                                  ),
                                 ),
-                                hint: Text(
-                                  'Pilih kategori',
+                                child: DropdownButton<CategoryMeta>(
+                                  value: _selectedCategory,
+                                  isExpanded: true,
+                                  underline: const SizedBox.shrink(),
+                                  dropdownColor: cs.surface,
                                   style: GoogleFonts.lato(
-                                    color: AppColors.textMuted,
+                                    color: cs.onSurface,
                                     fontSize: 13,
                                   ),
-                                ),
-                                items: _buildCategoryItems(),
-                                onChanged: (v) {
-                                  if (v == null) return;
-                                  setState(() => _selectedCategory = v);
-                                  field.didChange(v);
-                                },
-                              ),
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        // ── Keterangan ──────────────────────────────
-                        TextFormField(
-                          controller: _descCtrl,
-                          style: GoogleFonts.lato(
-                            color: cs.onSurface,
-                            fontSize: 14,
-                          ),
-                          decoration: const InputDecoration(
-                            labelText: 'Keterangan',
-                            prefixIcon: Icon(Icons.notes_outlined),
-                          ),
-                          maxLength: 120,
-                          textCapitalization: TextCapitalization.sentences,
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) {
-                              return 'Keterangan wajib diisi';
-                            }
-                            if (v.trim().length < 3) {
-                              return 'Keterangan terlalu pendek';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        // ── Jumlah ──────────────────────────────────
-                        TextFormField(
-                          controller: _amountCtrl,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [_RupiahInputFormatter()],
-                          style: GoogleFonts.lato(
-                            color: cs.onSurface,
-                            fontSize: 14,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: 'Jumlah (Rp)',
-                            prefixIcon: const Icon(Icons.payments_outlined),
-                            helperText: 'Gunakan titik sebagai pemisah ribuan, mis. 1.500.000',
-                            helperStyle: GoogleFonts.lato(fontSize: 11),
-                          ),
-                          validator: (v) {
-                            try {
-                              parseRupiah(v ?? '');
-                              return null;
-                            } on FormatException catch (e) {
-                              return e.message;
-                            }
-                          },
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        // ── Tanggal ──────────────────────────────────
-                        Text(
-                          'Tanggal',
-                          style: GoogleFonts.lato(
-                            fontSize: 12,
-                            color: cs.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        InkWell(
-                          onTap: _pickDate,
-                          borderRadius: BorderRadius.circular(12),
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
-                            ),
-                            decoration: BoxDecoration(
-                              color: cs.surface,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Theme.of(context).dividerColor,
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.calendar_today_outlined,
-                                  color: cs.onSurfaceVariant,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    DateFormat(
-                                      'd MMMM yyyy',
-                                      'id_ID',
-                                    ).format(_selectedDate),
+                                  hint: Text(
+                                    'Pilih kategori',
                                     style: GoogleFonts.lato(
-                                      color: cs.onSurface,
-                                      fontSize: 14,
+                                      color: AppColors.textMuted,
+                                      fontSize: 13,
                                     ),
                                   ),
+                                  items: _buildCategoryItems(),
+                                  onChanged: (v) {
+                                    if (v == null) return;
+                                    setState(() {
+                                      _selectedCategory = v;
+                                      _isDirty = _checkDirty();
+                                    });
+                                    field.didChange(v);
+                                  },
                                 ),
-                                Icon(
-                                  Icons.chevron_right,
-                                  color: cs.onSurfaceVariant,
-                                  size: 18,
-                                ),
-                              ],
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // ── Keterangan ──────────────────────────────
+                          TextFormField(
+                            controller: _descCtrl,
+                            style: GoogleFonts.lato(
+                              color: cs.onSurface,
+                              fontSize: 14,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Keterangan',
+                              prefixIcon: Icon(Icons.notes_outlined),
+                            ),
+                            // A03: batas 1000 sesuai TransactionMapper.toMap
+                            maxLength: 1000,
+                            textCapitalization: TextCapitalization.sentences,
+                            // A09: Next membawa fokus ke field berikutnya
+                            textInputAction: TextInputAction.next,
+                            validator: (v) {
+                              if (v == null || v.trim().isEmpty) {
+                                return 'Keterangan wajib diisi';
+                              }
+                              if (v.trim().length < 2) {
+                                return 'Keterangan minimal 2 karakter';
+                              }
+                              if (v.trim().length > 1000) {
+                                return 'Keterangan maksimal 1000 karakter';
+                              }
+                              return null;
+                            },
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // ── Jumlah ──────────────────────────────────
+                          TextFormField(
+                            controller: _amountCtrl,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [_RupiahInputFormatter()],
+                            // A09: Done menutup keyboard setelah field terakhir
+                            textInputAction: TextInputAction.done,
+                            style: GoogleFonts.lato(
+                              color: cs.onSurface,
+                              fontSize: 14,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Jumlah (Rp)',
+                              prefixIcon: const Icon(Icons.payments_outlined),
+                              helperText: 'Gunakan titik sebagai pemisah ribuan, mis. 1.500.000',
+                              helperStyle: GoogleFonts.lato(fontSize: 11),
+                            ),
+                            validator: (v) {
+                              try {
+                                parseRupiah(v ?? '');
+                                return null;
+                              } on FormatException catch (e) {
+                                return e.message;
+                              }
+                            },
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // ── Tanggal ──────────────────────────────────
+                          Text(
+                            'Tanggal',
+                            style: GoogleFonts.lato(
+                              fontSize: 12,
+                              color: cs.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ),
+                          const SizedBox(height: 6),
+                          // A12: label aksesibilitas untuk date picker
+                          Semantics(
+                            label:
+                                'Pilih tanggal, saat ini '
+                                '${DateFormat("d MMMM yyyy", "id_ID").format(_selectedDate)}',
+                            button: true,
+                            child: InkWell(
+                              onTap: _pickDate,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 14,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: cs.surface,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Theme.of(context).dividerColor,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.calendar_today_outlined,
+                                      color: cs.onSurfaceVariant,
+                                      size: 18,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        DateFormat(
+                                          'd MMMM yyyy',
+                                          'id_ID',
+                                        ).format(_selectedDate),
+                                        style: GoogleFonts.lato(
+                                          color: cs.onSurface,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                    ),
+                                    Icon(
+                                      Icons.chevron_right,
+                                      color: cs.onSurfaceVariant,
+                                      size: 18,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
 
-                        const SizedBox(height: 24),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // ── Tombol simpan ─────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _saving ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                          const SizedBox(height: 24),
+                        ],
                       ),
                     ),
-                    child: _saving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            _isEdit ? 'Simpan Perubahan' : 'Tambah Transaksi',
-                            style: GoogleFonts.lato(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
                   ),
-                ),
-              ],
+
+                  // ── Tombol simpan ─────────────────────────────────
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _saving ? null : _save,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              _isEdit ? 'Simpan Perubahan' : 'Tambah Transaksi',
+                              style: GoogleFonts.lato(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        ), // Container
+      ), // PopScope
+    ); // SafeArea
   }
 }
