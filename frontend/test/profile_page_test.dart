@@ -127,7 +127,7 @@ void main() {
     await submit(tester);
     await tester.pumpAndSettle();
     expect(
-      find.text('Profil belum dapat disimpan. Periksa koneksi dan coba lagi.'),
+      find.textContaining('Hasil penyimpanan belum dapat dipastikan.'),
       findsOneWidget,
     );
     expect(
@@ -185,7 +185,10 @@ void main() {
     await tester.tap(theme);
     await tester.pumpAndSettle();
     expect(AppState.instance.darkMode, isTrue);
-    expect(find.text('Preferensi gagal disimpan. Coba lagi.'), findsOneWidget);
+    expect(
+      find.textContaining('Hasil penyimpanan belum dapat dipastikan.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets(

@@ -32,6 +32,31 @@ abstract final class RecordConcurrency {
     if (expected != actual) throw const RecordConflict(ConflictReason.changed);
   }
 
+  /// Only a pristine matching create, or exactly the next matching revision,
+  /// can acknowledge a retry. Different data/incarnations remain conflicts.
+  static bool confirmsRetry({
+    required Map<String, Object> desired,
+    required Map<String, dynamic> current,
+    RecordVersion? expected,
+  }) {
+    final actual = read(current);
+    if (actual == null) return false;
+    final matching =
+        current.containsKey('dateVersion') ==
+            desired.containsKey('dateVersion') &&
+        desired.entries.every(
+          (entry) =>
+              current[entry.key] == entry.value &&
+              (entry.value is! int || current[entry.key] is int),
+        );
+    if (!matching) return false;
+    if (expected == null) {
+      return actual.revision == 1 && actual.createdAt == actual.updatedAt;
+    }
+    return actual.createdAt == expected.createdAt &&
+        actual.revision == expected.revision + 1;
+  }
+
   /// Profile policy: same incarnation, merge independent fields, reject a field
   /// changed to a different value. Equal desired values make retries harmless.
   static Map<String, Object> profilePatch({

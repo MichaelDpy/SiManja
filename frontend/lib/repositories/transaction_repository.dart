@@ -170,8 +170,15 @@ class FirestoreTransactionRepository implements TransactionRepository {
     final data = TransactionMapper.toMap(transaction);
     final ref = _ref(uid, transaction.id);
     await _database().runTransaction((operation) async {
-      if ((await operation.get(ref)).exists) {
-        throw StateError('ID transaksi sudah digunakan.');
+      final existing = await operation.get(ref);
+      if (existing.exists) {
+        if (RecordConcurrency.confirmsRetry(
+          desired: data,
+          current: existing.data()!,
+        )) {
+          return;
+        }
+        throw const RecordConflict(ConflictReason.changed);
       }
       operation.set(ref, {
         ...data,
@@ -197,6 +204,15 @@ class FirestoreTransactionRepository implements TransactionRepository {
       final current = await operation.get(ref);
       if (!current.exists) throw const RecordConflict(ConflictReason.deleted);
       final actual = RecordConcurrency.read(current.data()!);
+      if (transaction.version != actual &&
+          transaction.version != null &&
+          RecordConcurrency.confirmsRetry(
+            desired: data,
+            current: current.data()!,
+            expected: transaction.version,
+          )) {
+        return;
+      }
       RecordConcurrency.requireSame(transaction.version, actual);
       operation.update(ref, {
         ...data,

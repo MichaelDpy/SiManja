@@ -732,6 +732,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
   // Anti double-submit
   bool _saving = false;
   String? _saveError;
+  String? _createId;
 
   bool get _isEdit => widget.existing != null;
 
@@ -917,6 +918,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     }
 
     if (_saving) return; // guard double-submit
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _saving = true);
 
     try {
@@ -930,7 +932,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
             date: _selectedDate,
           ) ??
           TransactionModel(
-            id: widget.existing?.id ?? AppState.instance.generateId(),
+            id: _createId ??= AppState.instance.generateId(),
             category: cat.name,
             description: _descCtrl.text.trim(),
             amount: amount,
@@ -947,6 +949,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       if (!mounted) return;
       Navigator.pop(context);
 
+      ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -980,9 +983,20 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       bottom: false,
       child: PopScope(
         // A14: intersep Back/swipe saat form dirty dan belum simpan
-        canPop: !_isDirty || _saving,
+        canPop: !_saving && !_isDirty,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
+          if (_saving) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Penyimpanan masih berjalan. Tunggu hasil dari server; permintaan belum dibatalkan.',
+                ),
+              ),
+            );
+            return;
+          }
           _confirmDiscard();
         },
         child: Container(
@@ -1158,14 +1172,16 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                                     ),
                                   ),
                                   items: _buildCategoryItems(),
-                                  onChanged: (v) {
-                                    if (v == null) return;
-                                    setState(() {
-                                      _selectedCategory = v;
-                                      _isDirty = _checkDirty();
-                                    });
-                                    field.didChange(v);
-                                  },
+                                  onChanged: _saving
+                                      ? null
+                                      : (v) {
+                                          if (v == null) return;
+                                          setState(() {
+                                            _selectedCategory = v;
+                                            _isDirty = _checkDirty();
+                                          });
+                                          field.didChange(v);
+                                        },
                                 ),
                               );
                             },
@@ -1175,6 +1191,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
                           // ── Keterangan ──────────────────────────────
                           TextFormField(
+                            enabled: !_saving,
                             controller: _descCtrl,
                             style: GoogleFonts.lato(
                               color: cs.onSurface,
@@ -1207,6 +1224,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
                           // ── Jumlah ──────────────────────────────────
                           TextFormField(
+                            enabled: !_saving,
                             controller: _amountCtrl,
                             keyboardType: TextInputType.number,
                             inputFormatters: [_RupiahInputFormatter()],
@@ -1251,7 +1269,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                                 '${DateFormat("d MMMM yyyy", "id_ID").format(_selectedDate)}',
                             button: true,
                             child: InkWell(
-                              onTap: _pickDate,
+                              onTap: _saving ? null : _pickDate,
                               borderRadius: BorderRadius.circular(12),
                               child: Container(
                                 width: double.infinity,

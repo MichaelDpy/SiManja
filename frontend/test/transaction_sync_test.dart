@@ -255,7 +255,7 @@ void main() {
     );
     repository.emit('A', [], cache: true);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Data cache/offline'), findsOneWidget);
+    expect(find.textContaining('Data dari cache'), findsOneWidget);
     repository.pendingWrite = Completer<void>();
     final request = state.addTransaction(syncedTransaction(12000));
     await tester.pump();

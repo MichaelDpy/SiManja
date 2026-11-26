@@ -9,6 +9,7 @@ import '../core/app_state.dart';
 import '../core/theme.dart';
 import '../models/user_profile.dart';
 import '../models/record_version.dart';
+import '../models/sync_failure.dart';
 import '../services/auth_service.dart';
 import '../widgets/session_scope.dart';
 
@@ -220,7 +221,7 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (e) {
       if (!mounted) return;
       setState(
-        () => _saveError = e is RecordConflict
+        () => _saveError = e is RecordConflict || e is SyncFailure
             ? e.toString()
             : e is ArgumentError
             ? e.message.toString()
@@ -241,7 +242,7 @@ class _ProfilePageState extends State<ProfilePage> {
     } catch (error) {
       if (mounted) {
         setState(
-          () => _saveError = error is RecordConflict
+          () => _saveError = error is RecordConflict || error is SyncFailure
               ? error.toString()
               : 'Preferensi gagal disimpan. Coba lagi.',
         );

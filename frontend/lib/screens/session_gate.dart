@@ -218,11 +218,7 @@ class _SessionGateState extends State<SessionGate> {
       );
     }
     final uid = session.user!.uid;
-    final syncVisible =
-        state.pendingMutations > 0 ||
-        state.transactionsHasPendingWrites ||
-        state.transactionsFromCache ||
-        state.transactionsError != null;
+    final syncVisible = state.hasTransactionNotice;
     final verifyVisible = needsEmailVerification(session.user);
     final noticesVisible = syncVisible || verifyVisible;
     return SessionScope(

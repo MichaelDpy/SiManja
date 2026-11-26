@@ -7,6 +7,7 @@ import 'finance_summary.dart';
 import 'mock_data.dart';
 import '../models/user_profile.dart';
 import '../models/record_version.dart';
+import '../models/sync_failure.dart';
 import '../repositories/profile_repository.dart';
 import '../repositories/transaction_repository.dart';
 
@@ -32,6 +33,7 @@ class AppState extends ChangeNotifier {
   bool profileSaving = false;
   bool profileReady = false;
   String? profileError;
+  SyncFailure? profileWriteFailure;
 
   bool get hasProfileRepository => _profileRepository != null;
   void useProfileRepository(ProfileRepository repository) {
@@ -48,6 +50,27 @@ class AppState extends ChangeNotifier {
   int pendingMutations = 0;
   bool transactionsFromCache = false;
   bool transactionsHasPendingWrites = false;
+  bool _hasTransactionSnapshot = false;
+  SyncFailure? transactionWriteFailure;
+  bool get transactionsServerConfirmed =>
+      _hasTransactionSnapshot &&
+      !transactionsLoading &&
+      !transactionsFromCache &&
+      !transactionsHasPendingWrites &&
+      transactionsError == null;
+  bool get hasTransactionNotice =>
+      transactionsLoading ||
+      pendingMutations > 0 ||
+      transactionsFromCache ||
+      transactionsHasPendingWrites ||
+      transactionsError != null ||
+      transactionWriteFailure != null;
+
+  void dismissTransactionWriteFailure() {
+    transactionWriteFailure = null;
+    notifyListeners();
+  }
+
   bool get hasTransactionRepository => _transactionRepository != null;
 
   void useTransactionRepository(TransactionRepository repository) {
@@ -121,7 +144,7 @@ class AppState extends ChangeNotifier {
       if (revision == _sessionRevision) {
         profileError = error is FormatException || error is ArgumentError
             ? 'Data profil tidak valid. Periksa data akun sebelum mencoba lagi.'
-            : 'Profil belum dapat dimuat. Periksa koneksi dan coba lagi.';
+            : SyncFailure.from(error).loadMessage;
       }
     } finally {
       if (revision == _sessionRevision) {
@@ -177,6 +200,7 @@ class AppState extends ChangeNotifier {
     final revision = _sessionRevision;
     final base = previous ?? _loadedProfile ?? _currentProfile();
     profileSaving = true;
+    profileWriteFailure = null;
     notifyListeners();
     try {
       if (repository != null) {
@@ -185,6 +209,12 @@ class AppState extends ChangeNotifier {
       if (revision != _sessionRevision) throw StateError('Sesi telah berubah.');
       _loadedProfile = profile;
       _applyProfile(profile);
+    } on RecordConflict {
+      rethrow;
+    } catch (error) {
+      final failure = SyncFailure.from(error);
+      if (revision == _sessionRevision) profileWriteFailure = failure;
+      throw failure;
     } finally {
       if (revision == _sessionRevision) {
         profileSaving = false;
@@ -209,6 +239,9 @@ class AppState extends ChangeNotifier {
     pendingMutations = 0;
     transactionsFromCache = false;
     transactionsHasPendingWrites = false;
+    _hasTransactionSnapshot = false;
+    transactionWriteFailure = null;
+    profileWriteFailure = null;
     sessionUid = null;
     name = '';
     email = '';
@@ -376,16 +409,17 @@ class AppState extends ChangeNotifier {
     }
     final revision = _sessionRevision;
     pendingMutations++;
+    transactionWriteFailure = null;
     notifyListeners();
     try {
       await action(repository, uid);
       if (revision != _sessionRevision) throw StateError('Sesi telah berubah.');
     } on RecordConflict {
       rethrow;
-    } catch (_) {
-      throw StateError(
-        'Perubahan belum dikonfirmasi server. Periksa koneksi atau izin akun.',
-      );
+    } catch (error) {
+      final failure = SyncFailure.from(error);
+      if (revision == _sessionRevision) transactionWriteFailure = failure;
+      throw failure;
     } finally {
       if (revision == _sessionRevision) {
         pendingMutations--;
@@ -412,6 +446,7 @@ class AppState extends ChangeNotifier {
     _transactionSubscription = null;
     _streamUid = uid;
     transactionsLoading = true;
+    _hasTransactionSnapshot = false;
     transactionsError = null;
     notifyListeners();
     bool active() =>
@@ -435,6 +470,7 @@ class AppState extends ChangeNotifier {
                 _transactions = List.from(snapshot.transactions);
                 _sortTransactions();
                 transactionsFromCache = snapshot.fromCache;
+                _hasTransactionSnapshot = true;
                 transactionsHasPendingWrites = snapshot.hasPendingWrites;
                 transactionsLoading = false;
                 transactionsError = null;

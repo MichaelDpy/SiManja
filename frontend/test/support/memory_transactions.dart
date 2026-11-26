@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:simanja/models/transaction_model.dart';
 import 'package:simanja/models/record_version.dart';
 import 'package:simanja/repositories/transaction_repository.dart';
@@ -13,6 +15,16 @@ class MemoryTransactions implements TransactionRepository {
   bool emitInitial = true;
   Completer<void>? pendingWrite;
   Object? writeFailure;
+  Object? failureAfterCommit;
+  int committedWrites = 0;
+  final attemptedIds = <String>[];
+
+  void _committed() {
+    committedWrites++;
+    final error = failureAfterCommit;
+    failureAfterCommit = null;
+    if (error != null) throw error;
+  }
 
   @override
   String newId(String uid) => 'generated-$uid-${++idCounter}';
@@ -59,11 +71,22 @@ class MemoryTransactions implements TransactionRepository {
 
   @override
   Future<void> add(String uid, TransactionModel transaction) async {
+    attemptedIds.add(transaction.id);
     await _write();
-    if ((rows[uid] ?? []).any((item) => item.id == transaction.id)) {
-      throw StateError('Duplicate ID');
+    final existing = (rows[uid] ?? [])
+        .where((item) => item.id == transaction.id)
+        .firstOrNull;
+    if (existing != null) {
+      if (mapEquals(
+        TransactionMapper.toMap(existing),
+        TransactionMapper.toMap(transaction),
+      )) {
+        return;
+      }
+      throw const RecordConflict(ConflictReason.changed);
     }
     emit(uid, [transaction, ...?rows[uid]]);
+    _committed();
   }
 
   @override
@@ -80,6 +103,7 @@ class MemoryTransactions implements TransactionRepository {
       uid,
       rows[uid]!.map((item) => item.id == id ? transaction : item).toList(),
     );
+    _committed();
   }
 
   @override
@@ -89,6 +113,8 @@ class MemoryTransactions implements TransactionRepository {
     RecordVersion? expectedVersion,
   }) async {
     await _write();
+    if (!(rows[uid] ?? []).any((item) => item.id == id)) return;
     emit(uid, (rows[uid] ?? []).where((item) => item.id != id).toList());
+    _committed();
   }
 }

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/user_profile.dart';
 import '../models/record_version.dart';
+import '../models/sync_failure.dart';
 import 'record_concurrency.dart';
 
 abstract interface class ProfileRepository {
@@ -83,6 +84,13 @@ class FirestoreProfileRepository implements ProfileRepository {
         'updatedAt': FieldValue.serverTimestamp(),
       });
     });
-    return _confirmed(ref);
+    try {
+      return await _confirmed(ref);
+    } on RecordConflict {
+      rethrow;
+    } catch (error) {
+      // The transaction already returned; a failed read is not a rejected write.
+      throw SyncFailure.from(error, forceUnconfirmed: true);
+    }
   }
 }
