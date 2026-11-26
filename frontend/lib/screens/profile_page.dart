@@ -185,7 +185,11 @@ class _ProfilePageState extends State<ProfilePage> {
         SnackBar(
           content: Text(
             'Profil berhasil disimpan ke akun.',
-            style: GoogleFonts.lato(fontSize: 12, color: AppColors.bgDark),
+            // A11: gunakan cs.onPrimary agar terbaca di kedua tema
+            style: GoogleFonts.lato(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
           ),
           backgroundColor: AppColors.teal,
           behavior: SnackBarBehavior.floating,
@@ -549,13 +553,30 @@ class _ProfilePageState extends State<ProfilePage> {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  '⚠ Data masih tersimpan lokal. '
-                  'Sinkronisasi cloud aktif setelah integrasi Firebase.',
+                  'Profil & preferensi tersimpan di akun. '
+                  'Foto profil hanya tersimpan lokal di perangkat ini.',
                   style: GoogleFonts.lato(
                     color: AppColors.textMuted,
                     fontSize: 10,
                   ),
                   textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // A17: pintu masuk halaman privasi & data
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/privacy'),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 44)),
+                  child: Text(
+                    'Privasi & Data Pengguna',
+                    style: GoogleFonts.lato(
+                      color: AppColors.teal,
+                      fontSize: 12,
+                      decoration: TextDecoration.underline,
+                      decorationColor: AppColors.teal,
+                    ),
+                  ),
                 ),
               ),
             ],

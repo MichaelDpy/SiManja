@@ -25,7 +25,8 @@ class IntroPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isLandscape = size.width >= 600 ||
+    final isLandscape =
+        size.width >= 600 ||
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
@@ -204,7 +205,7 @@ class _GraphicWidget extends StatelessWidget {
             child: _FloatingBadge(
               icon: Icons.trending_up,
               color: AppColors.income,
-              label: '+12%',
+              label: 'Contoh', // A16: label ilustrasi, bukan data nyata
             ),
           ),
           const Positioned(
@@ -213,7 +214,7 @@ class _GraphicWidget extends StatelessWidget {
             child: _FloatingBadge(
               icon: Icons.savings,
               color: AppColors.chart2,
-              label: 'Nabung',
+              label: 'Tabungan',
             ),
           ),
         ],
@@ -294,9 +295,7 @@ class _CtaSection extends StatelessWidget {
         Center(
           child: TextButton(
             onPressed: onLogin,
-            style: TextButton.styleFrom(
-              minimumSize: const Size(48, 48),
-            ),
+            style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
             child: Text(
               'Sudah punya akun? Masuk',
               style: GoogleFonts.lato(

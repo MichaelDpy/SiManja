@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/theme.dart';
@@ -12,6 +13,7 @@ import 'services/auth_service.dart';
 import 'screens/intro_page.dart';
 import 'screens/login_page.dart';
 import 'screens/session_gate.dart';
+import 'screens/privacy_page.dart';
 
 /// Bootstrap Firebase -> splash -> pemeriksaan sesi.
 /// Sesi aktif menuju Home; pengguna tanpa sesi melewati Intro dan Login.
@@ -21,8 +23,12 @@ void main() async {
 
   await initializeDateFormatting('id_ID', null);
 
+  // A13: Izinkan GoogleFonts mengambil dari network hanya saat ada koneksi;
+  // jika cache kosong dan offline, Flutter akan memakai fallback sistem.
+  // Nilai default sudah true, tapi eksplisit agar niat ini terdokumentasi.
+  GoogleFonts.config.allowRuntimeFetching = true;
+
   // Status bar awal: ikon gelap untuk splash yang berlatar putih.
-  // SimanjaApp akan menyesuaikan ulang sesuai tema aktif.
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -86,6 +92,7 @@ class _SimanjaAppState extends State<SimanjaApp> {
       ),
       '/register' => AuthFormPage(register: true, auth: widget.auth),
       '/reset-password' => AuthFormPage(register: false, auth: widget.auth),
+      '/privacy' => const PrivacyPage(),
       _ => const BootstrapPage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
