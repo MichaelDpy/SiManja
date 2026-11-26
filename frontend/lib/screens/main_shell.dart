@@ -30,6 +30,10 @@ class _MainShellState extends State<MainShell> {
   // subtree tetap hidup sehingga state tiap halaman tidak hilang saat ganti tab.
   late final List<Widget> _pages;
 
+  // GlobalKey memindahkan IndexedStack (beserta state keenam halaman) saat
+  // layout berganti antara bottom bar dan NavigationRail ketika rotasi.
+  final GlobalKey _stackKey = GlobalKey(debugLabel: 'main-shell-pages');
+
   @override
   void initState() {
     super.initState();
@@ -91,7 +95,8 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isWide = size.width >= 600 ||
+    final isWide =
+        size.width >= 600 ||
         MediaQuery.of(context).orientation == Orientation.landscape;
 
     // PopScope: konsumsi Back saat bukan di tab Dasbor → kembali ke Dasbor.
@@ -106,12 +111,14 @@ class _MainShellState extends State<MainShell> {
       child: isWide
           ? _WideLayout(
               pages: _pages,
+              stackKey: _stackKey,
               selectedIndex: _selectedIndex,
               navItems: _navItems,
               onSelect: _goToTab,
             )
           : _NarrowLayout(
               pages: _pages,
+              stackKey: _stackKey,
               selectedIndex: _selectedIndex,
               navItems: _navItems,
               onSelect: _goToTab,
@@ -124,12 +131,14 @@ class _MainShellState extends State<MainShell> {
 
 class _NarrowLayout extends StatelessWidget {
   final List<Widget> pages;
+  final GlobalKey stackKey;
   final int selectedIndex;
   final List<_NavItem> navItems;
   final ValueChanged<int> onSelect;
 
   const _NarrowLayout({
     required this.pages,
+    required this.stackKey,
     required this.selectedIndex,
     required this.navItems,
     required this.onSelect,
@@ -141,7 +150,7 @@ class _NarrowLayout extends StatelessWidget {
     final cs = theme.colorScheme;
 
     return Scaffold(
-      body: IndexedStack(index: selectedIndex, children: pages),
+      body: IndexedStack(key: stackKey, index: selectedIndex, children: pages),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           border: Border(
@@ -160,7 +169,7 @@ class _NarrowLayout extends StatelessWidget {
                 theme.bottomNavigationBarTheme.selectedItemColor ?? cs.primary,
             unselectedItemColor:
                 theme.bottomNavigationBarTheme.unselectedItemColor ??
-                    cs.onSurfaceVariant,
+                cs.onSurfaceVariant,
             showSelectedLabels: true,
             showUnselectedLabels: true,
             items: navItems
@@ -192,12 +201,14 @@ class _NarrowLayout extends StatelessWidget {
 
 class _WideLayout extends StatelessWidget {
   final List<Widget> pages;
+  final GlobalKey stackKey;
   final int selectedIndex;
   final List<_NavItem> navItems;
   final ValueChanged<int> onSelect;
 
   const _WideLayout({
     required this.pages,
+    required this.stackKey,
     required this.selectedIndex,
     required this.navItems,
     required this.onSelect,
@@ -217,8 +228,9 @@ class _WideLayout extends StatelessWidget {
               builder: (context, constraints) {
                 return SingleChildScrollView(
                   child: ConstrainedBox(
-                    constraints:
-                        BoxConstraints(minHeight: constraints.maxHeight),
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight,
+                    ),
                     child: IntrinsicHeight(
                       child: NavigationRail(
                         selectedIndex: selectedIndex,
@@ -226,8 +238,9 @@ class _WideLayout extends StatelessWidget {
                         labelType: NavigationRailLabelType.all,
                         backgroundColor: cs.surface,
                         selectedIconTheme: IconThemeData(color: cs.primary),
-                        unselectedIconTheme:
-                            IconThemeData(color: cs.onSurfaceVariant),
+                        unselectedIconTheme: IconThemeData(
+                          color: cs.onSurfaceVariant,
+                        ),
                         selectedLabelTextStyle: GoogleFonts.lato(
                           color: cs.primary,
                           fontSize: 10,
@@ -261,14 +274,14 @@ class _WideLayout extends StatelessWidget {
               },
             ),
             // Divider vertikal
-            VerticalDivider(
-              width: 1,
-              thickness: 1,
-              color: theme.dividerColor,
-            ),
+            VerticalDivider(width: 1, thickness: 1, color: theme.dividerColor),
             // Konten halaman
             Expanded(
-              child: IndexedStack(index: selectedIndex, children: pages),
+              child: IndexedStack(
+                key: stackKey,
+                index: selectedIndex,
+                children: pages,
+              ),
             ),
           ],
         ),

@@ -614,70 +614,80 @@ class _TxListState extends State<_TxList> {
                   ),
                 ),
 
-                // Nominal + tombol aksi
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '$sign${_currencyFmt.format(tx.amount)}',
-                      style: GoogleFonts.lato(
-                        color: amtColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                // Nominal + tombol aksi. Flexible + scaleDown menjaga
+                // nominal besar tetap utuh pada layar 320 / teks 1,5.
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          '$sign${_currencyFmt.format(tx.amount)}',
+                          style: GoogleFonts.lato(
+                            color: amtColor,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // A12: target 48x48 minimum, label Indonesia
-                        Semantics(
-                          label: 'Edit transaksi ${tx.description}',
-                          button: true,
-                          child: InkWell(
-                            onTap: () => widget.onEdit(tx),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: Icon(
-                                Icons.edit_outlined,
-                                color: AppColors.teal,
-                                size: 16,
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // A12: target 48x48 minimum, label Indonesia
+                          Semantics(
+                            label: 'Edit transaksi ${tx.description}',
+                            button: true,
+                            child: InkWell(
+                              onTap: () => widget.onEdit(tx),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: Icon(
+                                  Icons.edit_outlined,
+                                  color: AppColors.teal,
+                                  size: 16,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        // A12: target 48x48 minimum, label Indonesia
-                        Semantics(
-                          label: 'Hapus transaksi ${tx.description}',
-                          button: true,
-                          child: InkWell(
-                            onTap: isDeleting ? null : () => _handleDelete(tx),
-                            borderRadius: BorderRadius.circular(8),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8),
-                              child: isDeleting
-                                  ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 1.5,
+                          const SizedBox(width: 4),
+                          // A12: target 48x48 minimum, label Indonesia
+                          Semantics(
+                            label: 'Hapus transaksi ${tx.description}',
+                            button: true,
+                            child: InkWell(
+                              onTap: isDeleting
+                                  ? null
+                                  : () => _handleDelete(tx),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: isDeleting
+                                    ? const SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                          color: AppColors.expense,
+                                        ),
+                                      )
+                                    : Icon(
+                                        Icons.delete_outline,
                                         color: AppColors.expense,
+                                        size: 16,
                                       ),
-                                    )
-                                  : Icon(
-                                      Icons.delete_outline,
-                                      color: AppColors.expense,
-                                      size: 16,
-                                    ),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

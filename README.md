@@ -8,6 +8,7 @@ Default pengembangan memakai **Firebase Emulator dengan project `demo-simanja`**
 | --- | --- |
 | `frontend/` | Aplikasi Flutter, aset, konfigurasi platform, dan pengujian |
 | `backend/` | Konfigurasi Firebase Emulator, indeks Firestore, dan security rules |
+| `docs/` | Panduan presentasi: skenario demo, alur Firebase, status fitur, kontribusi, dan backlog (`docs/presentasi.md`) |
 
 Alur data: `Auth → UID → repository → AppState/ChangeNotifier → UI`. Bootstrap ada di `frontend/lib/core/firebase_bootstrap.dart`, repository di `frontend/lib/repositories/`, dan pengujian emulator di `backend/test/`.
 
@@ -126,6 +127,17 @@ flutter build apk --debug --no-pub
 
 APK ada di `frontend/build/app/outputs/apk/debug/app-debug.apk` dan tidak ikut Git. Pada pemeriksaan 20 November 2026, startup dari proses baru juga berhasil menampilkan halaman awal di Android Emulator Pixel 7a. Perangkat fisik/iOS belum diverifikasi.
 
-Untuk demo/handoff A8: daftar akun A, tambah pemasukan/pengeluaran pada periode yang dipilih, tunjukkan perubahan Dasbor/Data/Analitik, lalu edit/hapus. Simpan nama/tema dan login ulang untuk menunjukkan persistensi. Buka akun B untuk menunjukkan data terpisah, kemudian tunjukkan cache/pending/error tanpa menyebut write tertunda sudah diterima server.
+### Pemeriksaan integrasi akhir (A8, 26 November 2026)
 
-Jawaban presentasi mengikuti batas implementasi: aset tidak ikut berubah karena masih data contoh; pemisahan akun ditegakkan oleh rules selain UI; password dikelola Auth; verifikasi backend saat ini menggunakan emulator.
+| Pemeriksaan | Hasil |
+| --- | --- |
+| `flutter analyze --no-pub` dari `frontend/` | Bersih |
+| `flutter test --no-pub` dari `frontend/` | Seluruh 187 tes lulus, termasuk `test/layout_audit_test.dart` (enam tab pada 320/360/412/landscape × teks 1,0/1,5 × terang/gelap, rotasi, periode Dasbor) |
+| `npm.cmd test` dari `backend/` | Seluruh 66 tes emulator lulus |
+| `flutter build apk --debug --no-pub` dari `frontend/` | Berhasil (`build/app/outputs/flutter-apk/app-debug.apk`) |
+| Uji manual alur lengkap (daftar/login → CRUD → Data/Dasbor/Analitik → profil → buka ulang → logout → akun kedua) | **Belum dijalankan pada A8.** Akan diuji manual di HP Android oleh tim; alur yang sama sudah tercakup tes widget dan tes emulator di atas |
+| iOS, project Firebase asli | Belum diuji |
+
+A8 memperbaiki overflow pada layar sempit/teks besar (Dasbor, Aset, Transaksi, Profil), state tab yang hilang saat rotasi, filter periode Dasbor yang tertinggal setelah CRUD, dan avatar Dasbor tanpa fallback saat file foto lokal hilang.
+
+Skenario demo, status fitur cloud/lokal/contoh, pembagian kontribusi, cara menjawab batas fitur, dan backlog tahap 2 ada di [`docs/presentasi.md`](docs/presentasi.md).

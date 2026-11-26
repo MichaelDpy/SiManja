@@ -778,9 +778,11 @@ class _SectionLabel extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          label,
-          style: GoogleFonts.lato(fontSize: 15, fontWeight: FontWeight.w700),
+        Expanded(
+          child: Text(
+            label,
+            style: GoogleFonts.lato(fontSize: 15, fontWeight: FontWeight.w700),
+          ),
         ),
       ],
     );

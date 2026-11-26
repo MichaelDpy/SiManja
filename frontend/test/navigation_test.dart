@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -176,24 +175,6 @@ void main() {
 
   // ── MainShell portrait: BottomNavigationBar ────────────────────────────
   group('MainShell portrait (BottomNavigationBar)', () {
-    FlutterExceptionHandler? originalHandler;
-
-    setUp(() {
-      originalHandler = FlutterError.onError;
-      FlutterError.onError = (details) {
-        final msg = details.exceptionAsString();
-        if (msg.contains('RenderFlex overflowed') &&
-            details.stack.toString().contains('dashboard_page')) {
-          return; // abaikan overflow internal dasbor (milik A5)
-        }
-        originalHandler?.call(details);
-      };
-    });
-
-    tearDown(() {
-      FlutterError.onError = originalHandler;
-    });
-
     testWidgets('BottomNavigationBar ditampilkan di portrait', (tester) async {
       tester.view.physicalSize = const Size(412, 900);
       tester.view.devicePixelRatio = 1.0;

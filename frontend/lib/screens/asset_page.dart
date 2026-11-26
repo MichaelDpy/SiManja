@@ -691,10 +691,13 @@ class _AssetPageState extends State<AssetPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Detail Aset',
-              style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            Flexible(
+              child: Text(
+                'Detail Aset',
+                style: tt.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+              ),
             ),
+            const SizedBox(width: 8),
             Text(
               '${assets.length} Aset',
               style: tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),

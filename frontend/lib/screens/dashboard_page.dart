@@ -198,6 +198,16 @@ class _DashboardPageState extends State<DashboardPage> {
     if (mounted) setState(() {});
   }
 
+  static ImageProvider? _avatarImage(String? path) {
+    if (path == null || path.isEmpty) return null;
+    try {
+      final file = File(path);
+      return file.existsSync() ? FileImage(file) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Membangun daftar pilihan periode dari seri transaksi 6 bulan terakhir.
   List<_DashboardPeriod> _buildPeriods(List<TransactionModel> txList) {
     final list = <_DashboardPeriod>[const _DashboardPeriod.all()];
@@ -503,6 +513,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
     // Filter transaksi untuk ringkasan arus kas
     final periods = _buildPeriods(state.transactions);
+    // Rentang chip mengikuti transaksi terbaru. Bila CRUD menggeser rentang
+    // sehingga periode terpilih tidak lagi tampil, kembali ke "Semua" agar
+    // ringkasan tidak memakai filter yang tidak terlihat.
+    if (!periods.contains(_selectedPeriod)) {
+      _selectedPeriod = const _DashboardPeriod.all();
+    }
     final filteredTx = _filterTransactions(state.transactions);
 
     // Perhitungan ringkasan keuangan dari utility A3
@@ -570,21 +586,36 @@ class _DashboardPageState extends State<DashboardPage> {
                     ),
                     const SizedBox(width: 4),
                     // Avatar profil
-                    GestureDetector(
-                      onTap: () => widget.onNavigateToTab?.call(5),
-                      child: CircleAvatar(
-                        radius: 19,
-                        backgroundColor: AppColors.teal.withValues(alpha: 0.2),
-                        backgroundImage: state.photoPath != null
-                            ? FileImage(File(state.photoPath!))
-                            : null,
-                        child: state.photoPath == null
-                            ? const Icon(
-                                Icons.person,
-                                color: AppColors.teal,
-                                size: 20,
-                              )
-                            : null,
+                    Semantics(
+                      label: 'Buka profil',
+                      button: true,
+                      child: InkWell(
+                        onTap: () => widget.onNavigateToTab?.call(5),
+                        customBorder: const CircleBorder(),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Builder(
+                            builder: (_) {
+                              final avatar = _avatarImage(state.photoPath);
+                              return CircleAvatar(
+                                radius: 19,
+                                backgroundColor: AppColors.teal.withValues(
+                                  alpha: 0.2,
+                                ),
+                                backgroundImage: avatar,
+                                // File foto lokal hilang → ikon fallback,
+                                // sama dengan perilaku avatar di Profil.
+                                child: avatar == null
+                                    ? const Icon(
+                                        Icons.person,
+                                        color: AppColors.teal,
+                                        size: 20,
+                                      )
+                                    : null,
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -766,10 +797,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                 color: AppColors.teal,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                'Arus Kas Transaksi',
-                                style: tt.titleSmall?.copyWith(
-                                  fontWeight: FontWeight.w700,
+                              Flexible(
+                                child: Text(
+                                  'Arus Kas Transaksi',
+                                  style: tt.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
                             ],
@@ -902,10 +935,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                     color: cs.primary,
                                   ),
                                   const SizedBox(width: 6),
-                                  Text(
-                                    'Total Nilai Aset',
-                                    style: tt.titleSmall?.copyWith(
-                                      fontWeight: FontWeight.w700,
+                                  Flexible(
+                                    child: Text(
+                                      'Total Nilai Aset',
+                                      style: tt.titleSmall?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                                   ),
                                 ],
