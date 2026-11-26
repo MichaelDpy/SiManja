@@ -57,24 +57,32 @@ Folder `.cache/` tidak ikut Git. Jangan memakai perintah pengujian untuk menyimp
 
 Pilih project yang benar di Firebase Console, daftarkan aplikasi sesuai target, aktifkan provider **Email/Password** di Authentication, dan siapkan database Cloud Firestore `(default)`. Android saat ini memakai application ID `com.example.simanja`; registrasi target harus sesuai konfigurasi aplikasi. Ikuti [setup Flutter](https://firebase.google.com/docs/flutter/setup) dan [Auth email/password](https://firebase.google.com/docs/auth/flutter/password-auth).
 
-Bootstrap repository ini membaca `FirebaseOptions` melalui Dart defines. Isi `frontend/config/firebase.local.json` dengan nilai asli dari konfigurasi aplikasi Firebase target; file tersebut diabaikan Git. Contoh struktur berikut adalah placeholder, bukan konfigurasi project yang dapat dipakai:
+### Lingkungan Firebase (dev / staging / production)
 
-```json
-{
-  "USE_FIREBASE_EMULATORS": false,
-  "FIREBASE_PROJECT_ID": "ISI_PROJECT_ID_ASLI",
-  "FIREBASE_API_KEY": "ISI_API_KEY_APLIKASI",
-  "FIREBASE_APP_ID": "ISI_APP_ID_TARGET",
-  "FIREBASE_MESSAGING_SENDER_ID": "ISI_SENDER_ID"
-}
-```
+Satu-satunya sumber konfigurasi adalah Dart define yang dibaca `frontend/lib/core/firebase_environment.dart`. Nilai itu divalidasi sebelum `FirebaseBootstrap` memanggil `Firebase.initializeApp`, dan hanya ada satu app Firebase default.
 
-Tambahkan `FIREBASE_AUTH_DOMAIN` untuk target Web dan `FIREBASE_IOS_BUNDLE_ID` untuk target iOS sesuai konfigurasi aslinya. App ID berbeda untuk setiap target; pilih konfigurasi yang sesuai saat menjalankan:
+| `SIMANJA_ENV` | Backend | Aturan |
+| --- | --- | --- |
+| `dev` (default bila tidak diisi) | Firebase Emulator, project `demo-*` | Ditolak pada build rilis. `FIREBASE_EMULATOR_HOST` opsional, berupa IP/host tanpa skema atau port. |
+| `staging` | Project cloud non-produksi | Wajib `FIREBASE_PROJECT_ID`, `FIREBASE_API_KEY`, `FIREBASE_APP_ID`, `FIREBASE_MESSAGING_SENDER_ID` dengan format Firebase yang sah. |
+| `production` | Project cloud rilis | Aturannya sama dengan staging. Hanya aktif bila dipilih eksplisit, tidak pernah dipilih otomatis. |
+
+Untuk staging/production, nilai berikut ditolak: project `demo-*`, placeholder `ISI_…`, App ID platform lain (misalnya App ID web pada build Android), App ID yang sender-nya tidak cocok, dan `FIREBASE_EMULATOR_HOST`. Target Web/desktop juga wajib `FIREBASE_AUTH_DOMAIN`, dan iOS wajib `FIREBASE_IOS_BUNDLE_ID`. Flag lama `USE_FIREBASE_EMULATORS` masih diterima: `true` berarti dev, `false` berarti staging. Flag itu ditolak bila bertentangan dengan `SIMANJA_ENV`.
+
+Konfigurasi yang tidak valid menampilkan halaman "Konfigurasi Firebase tidak valid" beserta nama field yang bermasalah, tanpa menampilkan nilainya dan tanpa tombol coba lagi, karena aplikasi harus di-build ulang. Kegagalan runtime (jaringan atau emulator mati) menampilkan tombol "Coba lagi". Tidak ada fallback ke emulator atau data dummy.
+
+Salin contoh di `frontend/config/` menjadi `firebase.<env>.json` lalu isi dengan nilai asli dari Firebase Console. File `firebase.*.json` diabaikan Git, kecuali `*.example.json` yang berisi placeholder:
 
 ```powershell
-# Dari frontend/, setelah konfigurasi asli diisi.
-flutter run --dart-define-from-file=config/firebase.local.json
+# Dari frontend/.
+Copy-Item config/firebase.staging.example.json config/firebase.staging.json
 ```
+
+```powershell
+flutter run --dart-define-from-file=config/firebase.staging.json
+```
+
+App ID berbeda untuk setiap platform, jadi siapkan file per target bila perlu. Konfigurasi client ini bukan secret server, tetapi setiap anggota mengisi target miliknya sendiri. Nilai staging/production asli belum tersedia, sehingga inisialisasi ke project cloud **belum diverifikasi**.
 
 Konfigurasi client tidak memerlukan service-account/private key. Password dikelola Firebase Auth dan tidak disimpan pada dokumen Firestore. Jangan memasukkan token CLI atau private credential ke repository.
 

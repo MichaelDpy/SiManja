@@ -128,7 +128,12 @@ backend/functions/node_modules/
 backend/functions/lib/
 backend/.cache/
 backend/*-debug.log
-frontend/config/firebase.local.json
+
+# Konfigurasi lingkungan Firebase per developer (dev/staging/production).
+# Bukan secret server, tetapi tiap orang mengisi target miliknya sendiri;
+# hanya contoh ber-placeholder yang ikut Git.
+frontend/config/firebase.*.json
+!frontend/config/firebase.*.example.json
 
 # Log hasil pemeriksaan dan cache Kotlin lokal
 *.log.*
