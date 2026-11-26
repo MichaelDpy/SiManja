@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:intl/intl.dart';
@@ -94,9 +95,10 @@ abstract final class CsvExporter {
       );
     }
 
-    // UTF-8 BOM agar Excel Windows membuka dengan encoding benar
+    // A07: UTF-8 BOM agar Excel Windows membuka dengan encoding benar.
+    // Gunakan utf8.encode, bukan codeUnits yang memberi UTF-16 code units.
     const bom = [0xEF, 0xBB, 0xBF];
-    return [...bom, ...buf.toString().codeUnits];
+    return [...bom, ...utf8.encode(buf.toString())];
   }
 
   /// Format tanggal ISO 8601 (YYYY-MM-DD).

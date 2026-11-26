@@ -70,7 +70,15 @@ class _DataTablePageState extends State<DataTablePage> {
   }
 
   void _onStateChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      // A05: jaga invariant — jika bulan terpilih tidak ada lagi di data,
+      // reset ke "Semua" agar DropdownButton tidak menerima value tak dikenal.
+      final opts = _buildPeriodOptions();
+      if (!opts.contains(_period)) {
+        _period = const _PeriodFilter();
+      }
+      setState(() {});
+    }
   }
 
   // ── Derived data ──────────────────────────────────────────────────────
@@ -112,16 +120,21 @@ class _DataTablePageState extends State<DataTablePage> {
       int cmp;
       switch (_sortCol) {
         case _SortCol.no:
-          // Nomor urut mengikuti posisi display; sort by ID stabil
-          cmp = a.id.compareTo(b.id);
+          // A06: tie-breaker stabil: tanggal terbaru dulu, lalu ID lexicographic
+          final dc = b.date.compareTo(a.date);
+          cmp = dc != 0 ? dc : a.id.compareTo(b.id);
         case _SortCol.kategori:
           cmp = a.category.compareTo(b.category);
+          if (cmp == 0) cmp = b.date.compareTo(a.date);
+          if (cmp == 0) cmp = a.id.compareTo(b.id);
         case _SortCol.jumlah:
           final av = a.isIncome ? a.amount : -a.amount;
           final bv = b.isIncome ? b.amount : -b.amount;
           cmp = av.compareTo(bv);
+          if (cmp == 0) cmp = a.id.compareTo(b.id);
         case _SortCol.tanggal:
           cmp = a.date.compareTo(b.date);
+          if (cmp == 0) cmp = a.id.compareTo(b.id);
       }
       return _sortAscending ? cmp : -cmp;
     });
@@ -180,8 +193,13 @@ class _DataTablePageState extends State<DataTablePage> {
 
   Future<void> _export() async {
     if (_exporting) return;
-    final rows = _displayRows;
-    if (rows.isEmpty) {
+    // A08: Bekukan snapshot saat ekspor dimulai — perubahan stream setelah
+    // ini tidak masuk ke file yang sedang dibuat.
+    final snapshot = _displayRows.toList();
+    final snapshotPeriod = _period.label;
+    final snapshotUid = AppState.instance.sessionUid;
+
+    if (snapshot.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Tidak ada data untuk diekspor'),
@@ -197,14 +215,19 @@ class _DataTablePageState extends State<DataTablePage> {
     setState(() => _exporting = true);
     try {
       final result = await CsvExporter.export(
-        transactions: rows,
-        periodLabel: _period.label,
+        transactions: snapshot,
+        periodLabel: snapshotPeriod,
       );
+      // A08: Periksa UID tidak berubah selama ekspor berlangsung
       if (!mounted) return;
+      if (AppState.instance.sessionUid != snapshotUid) {
+        // Sesi berubah — abaikan hasil tanpa menampilkan sukses
+        return;
+      }
 
       if (result.isSuccess) {
-        // Share sheet sudah terbuka — tidak perlu SnackBar "berhasil tersimpan"
-        // karena file baru benar-benar disimpan setelah pengguna memilih tujuan.
+        // Share sheet sudah terbuka — tidak klaim "berhasil tersimpan"
+        // karena file baru tersimpan setelah pengguna memilih tujuan.
       } else if (result.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -227,7 +250,7 @@ class _DataTablePageState extends State<DataTablePage> {
           ),
         );
       }
-      // isCancelled: pengguna menutup share sheet sendiri — tidak perlu feedback
+      // isCancelled: pengguna menutup share sheet — tidak perlu feedback
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -338,11 +361,18 @@ class _DataTablePageState extends State<DataTablePage> {
         ),
 
         // ── Catatan ringkasan ───────────────────────────────────────
-        if (!_period.isAll)
+        if (!_period.isAll || _filterText.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
             child: Text(
-              'Ringkasan untuk periode: ${_period.label}',
+              // A06: label scope menjelaskan angka mana yang ditampilkan
+              _filterText.isNotEmpty && !_period.isAll
+                  ? 'Ringkasan untuk periode "${_period.label}", '
+                        'pencarian "$_filterText" — ${_periodFiltered.length} transaksi'
+                  : _filterText.isNotEmpty
+                  ? 'Ringkasan untuk pencarian "$_filterText" — '
+                        '${_displayRows.length} dari ${_allTx.length} transaksi'
+                  : 'Ringkasan untuk periode: ${_period.label}',
               style: GoogleFonts.lato(color: AppColors.textMuted, fontSize: 10),
             ),
           ),
@@ -388,7 +418,11 @@ class _DataTablePageState extends State<DataTablePage> {
               // Filter periode
               _PeriodDropdown(
                 options: periodOptions,
-                selected: _period,
+                // A05: jika _period tidak ada di opsi (bulan terhapus dari data),
+                // fallback ke "Semua" agar tidak ada assertion DropdownButton.
+                selected: periodOptions.contains(_period)
+                    ? _period
+                    : const _PeriodFilter(),
                 onChanged: (p) => setState(() => _period = p),
               ),
             ],
