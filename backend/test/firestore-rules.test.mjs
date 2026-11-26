@@ -5,6 +5,7 @@ import { initializeTestEnvironment, assertSucceeds } from '@firebase/rules-unit-
 import {
   doc, collection, collectionGroup, setDoc, updateDoc, deleteDoc, deleteField,
   getDocFromServer, getDocsFromServer, serverTimestamp, Timestamp, writeBatch,
+  query, where,
 } from 'firebase/firestore';
 import { emulatorAddress, projectId, profile, transaction } from './support/emulator.mjs';
 
@@ -24,6 +25,73 @@ const db = (uid = 'A') => uid === null
   : env.authenticatedContext(uid).firestore();
 const path = (owner = 'A', id = 'stable') => `users/${owner}/transactions/${id}`;
 const denied = (request) => assert.rejects(request, { code: 'permission-denied' });
+
+const calendarTransaction = (iso = '2026-01-31T00:00:00Z') => ({
+  ...transaction(), date: Timestamp.fromDate(new Date(iso)), dateVersion: 2,
+});
+
+test('R-DATE: v2 menerima batas tahun, kabisat dan masa depan pada UTC midnight', async () => {
+  for (const [i, day] of ['1900-01-01', '2024-02-29', '2025-12-31', '2026-01-01', '2199-01-01', '2200-12-31'].entries()) {
+    const ref = doc(db(), path('A', `calendar-${i}`));
+    await assertSucceeds(setDoc(ref, calendarTransaction(`${day}T00:00:00Z`)));
+    const first = (await getDocFromServer(ref)).data();
+    assert.equal(first.dateVersion, 2);
+    assert.equal(first.date.toDate().toISOString(), `${day}T00:00:00.000Z`);
+    await assertSucceeds(updateDoc(ref, { description: 'Edit biasa', updatedAt: serverTimestamp() }));
+    const edited = (await getDocFromServer(ref)).data();
+    assert.ok(edited.createdAt.isEqual(first.createdAt));
+    assert.ok(edited.date.isEqual(first.date));
+  }
+});
+
+test('R-DATE: versi/timestamp v2 invalid ditolak create dan update', async () => {
+  const invalid = [
+    { dateVersion: 0 }, { dateVersion: 1 }, { dateVersion: 3 },
+    { dateVersion: '2' }, { dateVersion: null }, { dateVersion: true },
+    { date: Timestamp.fromDate(new Date('2026-01-31T00:00:00+07:00')) },
+    { date: Timestamp.fromDate(new Date('2026-01-31T00:00:01Z')) },
+    // Firestore stores microseconds; sub-microsecond values are truncated.
+    { date: new Timestamp(1769817600, 1000) },
+    { date: Timestamp.fromDate(new Date('1899-12-31T00:00:00Z')) },
+    { date: Timestamp.fromDate(new Date('2201-01-01T00:00:00Z')) },
+  ];
+  const ref = doc(db(), path());
+  for (const bad of invalid) {
+    await denied(setDoc(ref, { ...calendarTransaction(), ...bad }));
+  }
+  await setDoc(ref, calendarTransaction());
+  for (const bad of invalid) {
+    await denied(updateDoc(ref, { ...bad, updatedAt: serverTimestamp() }));
+  }
+});
+
+test('R-DATE: legacy tetap sah, konfirmasi v2 diperbolehkan, downgrade ditolak', async () => {
+  const ref = doc(db(), path());
+  await setDoc(ref, transaction());
+  const legacy = (await getDocFromServer(ref)).data();
+  await assertSucceeds(updateDoc(ref, { amount: 20, updatedAt: serverTimestamp() }));
+  assert.ok((await getDocFromServer(ref)).data().date.isEqual(legacy.date));
+  await assertSucceeds(updateDoc(ref, {
+    date: calendarTransaction().date, dateVersion: 2, updatedAt: serverTimestamp(),
+  }));
+  await denied(updateDoc(ref, { dateVersion: deleteField(), updatedAt: serverTimestamp() }));
+  await denied(setDoc(ref, { ...transaction(), createdAt: legacy.createdAt }));
+  await denied(updateDoc(ref, { date: legacy.date, updatedAt: serverTimestamp() }));
+  // A legacy writer using update for a non-date field remains compatible.
+  await assertSucceeds(updateDoc(ref, { amount: 30, updatedAt: serverTimestamp() }));
+  await denied(updateDoc(doc(db('B'), path()), { date: calendarTransaction().date, updatedAt: serverTimestamp() }));
+});
+
+test('R-DATE: query v2 bulan memakai batas UTC inklusif/eksklusif', async () => {
+  const own = db();
+  for (const [id, day] of [['before', '2025-12-31'], ['start', '2026-01-01'], ['end', '2026-01-31'], ['after', '2026-02-01']]) {
+    await setDoc(doc(own, path('A', id)), calendarTransaction(`${day}T00:00:00Z`));
+  }
+  const january = query(collection(own, 'users/A/transactions'),
+    where('date', '>=', Timestamp.fromDate(new Date('2026-01-01T00:00:00Z'))),
+    where('date', '<', Timestamp.fromDate(new Date('2026-02-01T00:00:00Z'))));
+  assert.deepEqual((await getDocsFromServer(january)).docs.map((d) => d.id).sort(), ['end', 'start']);
+});
 
 test('pemilik dapat CRUD, list, dan mempertahankan ID serta createdAt transaksi', async () => {
   const own = db();

@@ -32,11 +32,13 @@ void main() {
         'amount',
         'isIncome',
         'date',
+        'dateVersion',
       });
       final restored = TransactionMapper.fromMap(tx.id, document());
       expect(restored.id, tx.id);
       expect(restored.amount, tx.amount);
-      expect(restored.date, tx.date);
+      expect(restored.date, DateTime.utc(2026, 11, 19));
+      expect(restored.needsDateReview, isFalse);
       expect(restored.category, 'Kategori baru');
       expect(CategoryMeta.of(restored.category).icon, isNotNull);
     },
@@ -44,7 +46,7 @@ void main() {
   test('jam tidak menggeser tanggal yang dipilih', () {
     final tx = transaction().copyWith(date: DateTime(2026, 12, 31, 23, 59));
     final date = (TransactionMapper.toMap(tx)['date'] as Timestamp).toDate();
-    expect(date, DateTime(2026, 12, 31));
+    expect(date.toUtc(), DateTime.utc(2026, 12, 31));
   });
   for (final amount in [
     0.0,

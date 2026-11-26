@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/calendar_date.dart';
 import '../core/rupiah.dart';
 import '../core/theme.dart';
 
@@ -16,7 +17,8 @@ import '../core/theme.dart';
 ///                   Maksimum [Rupiah.maxRecord]; agregasi memakai BigInt.
 ///                   Firestore menyimpan sebagai integer; konversi hanya setelah validasi.
 /// - [isIncome]    : true = pemasukan, false = pengeluaran.
-/// - [date]        : Tanggal transaksi (bukan waktu server).
+/// - [date]        : Komponen tanggal kalender, bukan instant (R-DATE).
+///                   Pembaca v2 menggunakan UTC midnight sebagai facade.
 class TransactionModel {
   final String id;
   final String category;
@@ -25,6 +27,11 @@ class TransactionModel {
   final bool isIncome;
   final DateTime date;
 
+  /// Raw legacy timestamp, retained until the user changes the calendar date
+  /// or a reviewed migration resolves its missing source timezone.
+  final LegacyTransactionDate? legacyDate;
+  bool get needsDateReview => legacyDate != null;
+
   const TransactionModel({
     required this.id,
     required this.category,
@@ -32,6 +39,7 @@ class TransactionModel {
     required this.amount,
     required this.isIncome,
     required this.date,
+    this.legacyDate,
   });
 
   /// Validasi domain: amount harus finite, positif, dan merupakan bilangan bulat.
@@ -62,6 +70,9 @@ class TransactionModel {
       amount: amount ?? this.amount,
       isIncome: isIncome ?? this.isIncome,
       date: date ?? this.date,
+      legacyDate: date == null || CalendarDate.same(date, this.date)
+          ? legacyDate
+          : null,
     );
   }
 
@@ -75,6 +86,14 @@ class TransactionModel {
   String toString() =>
       'TransactionModel(id:$id, category:$category, amount:$amount, '
       'isIncome:$isIncome, date:${date.toIso8601String()})';
+}
+
+/// Preserve the full Firestore timestamp without coupling the model to its SDK.
+class LegacyTransactionDate {
+  const LegacyTransactionDate(this.seconds, this.nanoseconds);
+
+  final int seconds;
+  final int nanoseconds;
 }
 
 // ── Pemetaan kategori → ikon & warna ──────────────────────────────────────

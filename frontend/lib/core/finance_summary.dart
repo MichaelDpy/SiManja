@@ -1,4 +1,5 @@
 import 'rupiah.dart';
+import 'calendar_date.dart';
 import '../models/transaction_model.dart';
 
 /// Utilitas laporan keuangan SIMANJA.
@@ -16,16 +17,19 @@ abstract final class FinanceSummary {
 
   /// Kembalikan transaksi yang tanggalnya jatuh dalam rentang [from, until).
   ///
-  /// [from]  : inklusif (awal hari, sudah dalam UTC atau lokal — konsisten).
-  /// [until] : eksklusif (awal hari bulan berikutnya).
+  /// [from] inklusif dan [until] eksklusif, memakai komponen tanggal R-DATE.
+  /// Jam dan flag UTC/lokal bukan batas instant pada laporan kalender.
   static List<TransactionModel> filterPeriod(
     List<TransactionModel> txList, {
     required DateTime from,
     required DateTime until,
   }) {
-    return txList
-        .where((t) => !t.date.isBefore(from) && t.date.isBefore(until))
-        .toList();
+    final start = CalendarDate.canonical(from);
+    final end = CalendarDate.canonical(until);
+    return txList.where((t) {
+      final day = CalendarDate.canonical(t.date);
+      return !day.isBefore(start) && day.isBefore(end);
+    }).toList();
   }
 
   /// Kembalikan transaksi pada bulan [year]/[month] (1–12).

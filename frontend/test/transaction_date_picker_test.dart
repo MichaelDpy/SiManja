@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -6,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:simanja/core/app_state.dart';
 import 'package:simanja/main.dart';
 import 'package:simanja/models/transaction_model.dart';
+import 'package:simanja/repositories/transaction_repository.dart';
 import 'package:simanja/services/auth_service.dart';
 
 import 'support/memory_profiles.dart';
@@ -30,7 +32,7 @@ void main() {
     auth = SessionAuth(currentUser: const SessionUser('A', 'a@example.com'));
   });
 
-  Future<void> openForm(WidgetTester tester) async {
+  Future<void> openForm(WidgetTester tester, {bool edit = false}) async {
     tester.view.physicalSize = const Size(412, 915);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -49,7 +51,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Tambah Transaksi'));
+    await tester.tap(
+      edit
+          ? find.byIcon(Icons.edit_outlined).first
+          : find.byTooltip('Tambah Transaksi'),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -65,6 +71,39 @@ void main() {
   Finder input(String label) => find.byWidgetPredicate(
     (widget) => widget is TextField && widget.decoration?.labelText == label,
   );
+
+  testWidgets('edit keterangan legacy mempertahankan timestamp tanggal asli', (
+    tester,
+  ) async {
+    final original = Timestamp.fromDate(
+      DateTime.parse('2026-11-26T00:00:00+07:00'),
+    );
+    repository.rows['A'] = [
+      TransactionMapper.fromMap('legacy', {
+        'category': 'Gaji',
+        'description': 'Transaksi lama',
+        'amount': 12000,
+        'isIncome': true,
+        'date': original,
+        'createdAt': Timestamp(1234567890, 0),
+        'updatedAt': Timestamp(1234567900, 0),
+      }),
+    ];
+    await openForm(tester, edit: true);
+    await tester.enterText(input('Keterangan'), 'Keterangan diperbarui');
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    final save = find.widgetWithText(ElevatedButton, 'Simpan Perubahan');
+    await tester.ensureVisible(save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    final saved = repository.rows['A']!.single;
+    expect(saved.description, 'Keterangan diperbarui');
+    expect(saved.needsDateReview, isTrue);
+    expect(TransactionMapper.toMap(saved)['date'], original);
+    expect(TransactionMapper.toMap(saved).containsKey('dateVersion'), isFalse);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'kalender transaksi terbuka dalam bahasa Indonesia dan bisa batal',

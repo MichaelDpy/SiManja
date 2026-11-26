@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../core/rupiah.dart';
+import '../core/calendar_date.dart';
 import '../core/app_state.dart';
 import '../core/mock_data.dart';
 import '../core/theme.dart';
@@ -746,7 +747,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     }
     return _descCtrl.text.trim() != ex.description ||
         _amountCtrl.text.trim() != ex.amount.toStringAsFixed(0) ||
-        _selectedDate != ex.date ||
+        !CalendarDate.same(_selectedDate, ex.date) ||
         (_selectedCategory != null && _selectedCategory!.name != ex.category);
   }
 
@@ -920,14 +921,22 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
     try {
       final cat = _selectedCategory!;
-      final tx = TransactionModel(
-        id: widget.existing?.id ?? AppState.instance.generateId(),
-        category: cat.name,
-        description: _descCtrl.text.trim(),
-        amount: amount,
-        isIncome: cat.isIncome,
-        date: _selectedDate,
-      );
+      final tx =
+          widget.existing?.copyWith(
+            category: cat.name,
+            description: _descCtrl.text.trim(),
+            amount: amount,
+            isIncome: cat.isIncome,
+            date: _selectedDate,
+          ) ??
+          TransactionModel(
+            id: widget.existing?.id ?? AppState.instance.generateId(),
+            category: cat.name,
+            description: _descCtrl.text.trim(),
+            amount: amount,
+            isIncome: cat.isIncome,
+            date: _selectedDate,
+          );
 
       if (_isEdit) {
         await AppState.instance.updateTransaction(widget.existing!.id, tx);

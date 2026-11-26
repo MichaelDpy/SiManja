@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/calendar_date.dart';
 import '../core/rupiah.dart';
 import '../models/transaction_model.dart';
 
@@ -27,6 +28,7 @@ abstract interface class TransactionRepository {
 
 abstract final class TransactionMapper {
   static const maxRupiah = Rupiah.maxRecord;
+  static const dateVersion = 2;
 
   static void validateId(String id) {
     if (id.trim().isEmpty ||
@@ -50,22 +52,26 @@ abstract final class TransactionMapper {
         'Kategori, keterangan, nominal, atau tanggal transaksi tidak valid.',
       );
     }
-    // Tanggal kalender perangkat disimpan sebagai instant tengah malam lokal.
-    // Saat dibaca pada zona waktu lain, tanggal tampilan dapat berbeda.
-    final date = transaction.date.toLocal();
-    final storedDate = DateTime(date.year, date.month, date.day).toUtc();
-    if (date.year < 1900 ||
-        date.year > 2200 ||
-        storedDate.isBefore(DateTime.utc(1900)) ||
-        !storedDate.isBefore(DateTime.utc(2201))) {
+    final legacy = transaction.legacyDate;
+    final storedDate = legacy == null
+        ? Timestamp.fromDate(CalendarDate.canonical(transaction.date))
+        : Timestamp(legacy.seconds, legacy.nanoseconds);
+    final instant = storedDate.toDate().toUtc();
+    if (instant.isBefore(DateTime.utc(1900)) ||
+        !instant.isBefore(DateTime.utc(2201))) {
       throw ArgumentError('Tanggal di luar rentang.');
+    }
+    if (legacy != null &&
+        !CalendarDate.same(transaction.date, instant.toLocal())) {
+      throw ArgumentError('Tanggal legacy perlu dikonfirmasi ulang.');
     }
     return {
       'category': transaction.category.trim(),
       'description': transaction.description.trim(),
       'amount': transaction.amount.toInt(),
       'isIncome': transaction.isIncome,
-      'date': Timestamp.fromDate(storedDate),
+      'date': storedDate,
+      if (legacy == null) 'dateVersion': dateVersion,
     };
   }
 
@@ -88,13 +94,25 @@ abstract final class TransactionMapper {
         throw const FormatException('Metadata transaksi tidak valid.');
       }
     }
+    final hasVersion = data.containsKey('dateVersion');
+    final timestamp = data['date'] as Timestamp;
+    final instant = timestamp.toDate().toUtc();
+    if (hasVersion &&
+        (data['dateVersion'] is! int ||
+            data['dateVersion'] != dateVersion ||
+            timestamp != Timestamp.fromDate(CalendarDate.canonical(instant)))) {
+      throw const FormatException('Versi atau tanggal kalender tidak valid.');
+    }
     final transaction = TransactionModel(
       id: id,
       category: data['category'],
       description: data['description'],
       amount: (data['amount'] as int).toDouble(),
       isIncome: data['isIncome'],
-      date: (data['date'] as Timestamp).toDate().toLocal(),
+      date: hasVersion ? CalendarDate.canonical(instant) : instant.toLocal(),
+      legacyDate: hasVersion
+          ? null
+          : LegacyTransactionDate(timestamp.seconds, timestamp.nanoseconds),
     );
     toMap(transaction);
     return transaction;
