@@ -94,6 +94,14 @@ double parseRupiah(String raw) {
 }
 
 // ── TextInputFormatter: hanya izinkan digit + titik ──────────────────────
+//
+// Formatter MENOLAK update (kembalikan oldValue) bila ada karakter di luar
+// digit dan titik. Alasan: strip diam-diam mengubah makna angka — contoh,
+// paste "100,50" tanpa koma menjadi "10050" (sepuluh ribu, bukan seratus).
+// Satu-satunya pengecualian adalah teks kosong (izinkan hapus semua).
+//
+// Untuk pengujian unit, gunakan [RupiahInputFormatter] yang diekspor
+// dengan @visibleForTesting di bawah.
 
 class _RupiahInputFormatter extends TextInputFormatter {
   @override
@@ -103,17 +111,16 @@ class _RupiahInputFormatter extends TextInputFormatter {
   ) {
     // Izinkan hapus seluruh teks
     if (newValue.text.isEmpty) return newValue;
-    // Hanya digit dan titik
-    final filtered = newValue.text.replaceAll(RegExp(r'[^\d.]'), '');
-    if (filtered != newValue.text) {
-      return newValue.copyWith(
-        text: filtered,
-        selection: TextSelection.collapsed(offset: filtered.length),
-      );
-    }
+    // Tolak (bukan strip) jika ada karakter di luar digit dan titik.
+    // Ini melindungi makna angka saat paste dari clipboard.
+    if (!_kAllowedRupiah.hasMatch(newValue.text)) return oldValue;
     return newValue;
   }
 }
+
+/// Pola karakter yang diizinkan pada field nominal rupiah.
+/// Hanya digit dan titik; koma, tanda negatif, dan lainnya ditolak.
+final _kAllowedRupiah = RegExp(r'^[\d.]*$');
 
 // ── Kategori (alias CategoryMeta agar ringkas) ────────────────────────────
 
