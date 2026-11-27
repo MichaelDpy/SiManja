@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 
 import 'finance_summary.dart';
 import 'mock_data.dart';
+import 'transaction_report.dart';
+import '../models/transaction_history.dart';
 import '../models/user_profile.dart';
 import '../models/record_version.dart';
 import '../models/sync_failure.dart';
@@ -73,6 +75,26 @@ class AppState extends ChangeNotifier {
 
   bool get hasTransactionRepository => _transactionRepository != null;
 
+  Object _reportToken = Object();
+  TransactionHistoryRepository? get historyRepository {
+    final repository = _transactionRepository;
+    return repository is TransactionHistoryRepository
+        ? repository as TransactionHistoryRepository
+        : null;
+  }
+
+  ReportSource get reportSource => ReportSource(
+    transactions: _transactions,
+    token: _reportToken,
+    uid: sessionUid,
+    sessionRevision: _sessionRevision,
+    confirmed: _allowLocalTransactions || transactionsServerConfirmed,
+    loading: transactionsLoading,
+    pending: pendingMutations > 0 || transactionsHasPendingWrites,
+    fromCache: transactionsFromCache,
+    error: transactionsError,
+  );
+
   void useTransactionRepository(TransactionRepository repository) {
     if (identical(_transactionRepository, repository)) return;
     _transactionGeneration++;
@@ -81,6 +103,7 @@ class AppState extends ChangeNotifier {
     _streamUid = null;
     _transactionRepository = repository;
     _allowLocalTransactions = false;
+    _reportToken = Object();
   }
 
   void _startTransactionsIfNeeded() {
@@ -230,6 +253,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _clearUserData() {
+    _reportToken = Object();
     _sessionRevision++;
     _transactionGeneration++;
     _transactionSubscription?.cancel();
@@ -382,6 +406,7 @@ class AppState extends ChangeNotifier {
     }
     if (_allowLocalTransactions) {
       _transactions = _transactions.where((item) => item.id != id).toList();
+      _reportToken = Object();
       notifyListeners();
       return;
     }
@@ -532,6 +557,7 @@ class AppState extends ChangeNotifier {
   // ── Private ────────────────────────────────────────────────────────────
 
   void _sortTransactions() {
+    _reportToken = Object();
     _transactions.sort((a, b) {
       final d = b.date.compareTo(a.date);
       return d != 0 ? d : a.id.compareTo(b.id);

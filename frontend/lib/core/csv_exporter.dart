@@ -27,48 +27,67 @@ abstract final class CsvExporter {
   static Future<CsvExportResult> export({
     required List<TransactionModel> transactions,
     required String periodLabel,
+    String search = '',
+    bool Function()? isCurrent,
   }) async {
+    bool current() => isCurrent?.call() ?? true;
+    if (!current()) return const CsvExportResult.stale();
     if (transactions.isEmpty) {
       return const CsvExportResult.empty();
     }
 
     try {
-      final csvBytes = encode(transactions, periodLabel);
+      final csvBytes = encode(transactions, periodLabel, search: search);
 
       final dir = await getTemporaryDirectory();
+      if (!current()) return const CsvExportResult.stale();
       final safePeriod = periodLabel
           .replaceAll(RegExp(r'[^\w\-]'), '_')
           .replaceAll(RegExp(r'_+'), '_');
-      final fileName = 'simanja_transaksi_$safePeriod.csv';
+      final fileName =
+          'simanja_transaksi_${safePeriod}_${DateTime.now().microsecondsSinceEpoch}_${_exportSequence++}.csv';
       final file = File('${dir.path}/$fileName');
       await file.writeAsBytes(csvBytes, flush: true);
+      if (!current()) {
+        await file.delete();
+        return const CsvExportResult.stale();
+      }
 
       // share_plus v10 masih menggunakan API static Share.shareXFiles
       final result = await Share.shareXFiles([
         XFile(file.path, mimeType: 'text/csv'),
       ], subject: 'Data Transaksi SIMANJA — $periodLabel');
+      if (!current()) return const CsvExportResult.stale();
 
       if (result.status == ShareResultStatus.dismissed) {
         return const CsvExportResult.cancelled();
       }
       return const CsvExportResult.success();
-    } catch (e) {
-      return CsvExportResult.failure('$e');
+    } catch (_) {
+      return const CsvExportResult.failure(
+        'Berkas CSV belum dapat dibagikan. Coba lagi.',
+      );
     }
   }
 
   // ── CSV builder ───────────────────────────────────────────────────────
 
+  static int _exportSequence = 0;
+
   /// Serializes the transaction snapshot used by sharing and regression tests.
   static List<int> encode(
     List<TransactionModel> transactions,
-    String periodLabel,
-  ) {
+    String periodLabel, {
+    String search = '',
+  }) {
     final buf = StringBuffer();
 
     // Header baris komentar (diawali # → bukan formula)
     buf.writeln('# SIMANJA — Ekspor Data Transaksi');
-    buf.writeln('# Periode: $periodLabel');
+    buf.writeln('# Periode: ${_metadataLine(periodLabel)}');
+    if (search.trim().isNotEmpty) {
+      buf.writeln('# Pencarian: ${_metadataLine(search)}');
+    }
     buf.writeln('# Diekspor: ${_isoDate(DateTime.now())}');
     buf.writeln('# Jumlah baris: ${transactions.length}');
     buf.writeln('#');
@@ -106,6 +125,9 @@ abstract final class CsvExporter {
   /// Format tanggal ISO 8601 (YYYY-MM-DD).
   static String _isoDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
 
+  static String _metadataLine(String text) =>
+      text.replaceAll(RegExp(r'[\r\n]+'), ' ');
+
   /// Quote field CSV:
   /// - Selalu dibungkus tanda kutip ganda.
   /// - Tanda kutip di dalam di-escape jadi dua kutip ("").
@@ -128,7 +150,7 @@ abstract final class CsvExporter {
 
 // ── Result type ───────────────────────────────────────────────────────────
 
-enum _CsvExportStatus { success, empty, cancelled, failure }
+enum _CsvExportStatus { success, empty, cancelled, stale, failure }
 
 class CsvExportResult {
   final _CsvExportStatus _status;
@@ -139,11 +161,13 @@ class CsvExportResult {
   const CsvExportResult.success() : this._(_CsvExportStatus.success);
   const CsvExportResult.empty() : this._(_CsvExportStatus.empty);
   const CsvExportResult.cancelled() : this._(_CsvExportStatus.cancelled);
+  const CsvExportResult.stale() : this._(_CsvExportStatus.stale);
   const CsvExportResult.failure(String message)
     : this._(_CsvExportStatus.failure, errorMessage: message);
 
   bool get isSuccess => _status == _CsvExportStatus.success;
   bool get isEmpty => _status == _CsvExportStatus.empty;
   bool get isCancelled => _status == _CsvExportStatus.cancelled;
+  bool get isStale => _status == _CsvExportStatus.stale;
   bool get isFailure => _status == _CsvExportStatus.failure;
 }

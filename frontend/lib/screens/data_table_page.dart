@@ -5,7 +5,8 @@ import 'package:intl/intl.dart';
 import '../core/rupiah.dart';
 import '../core/app_state.dart';
 import '../core/csv_exporter.dart';
-import '../core/finance_summary.dart';
+import '../core/report_controller.dart';
+import '../core/transaction_report.dart';
 import '../core/theme.dart';
 import '../models/transaction_model.dart';
 import '../widgets/app_widgets.dart';
@@ -63,12 +64,38 @@ class _DataTablePageState extends State<DataTablePage> {
   String _filterText = '';
   _PeriodFilter _period = const _PeriodFilter(); // semua
   bool _exporting = false;
+  late final ReportController _report;
 
   @override
   void initState() {
     super.initState();
+    _report = ReportController(AppState.instance)
+      ..addListener(_onReportChanged);
     AppState.instance.addListener(_onStateChanged);
   }
+
+  void _onReportChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _configureReport() => _report.configure(
+    ReportCriteria(
+      from: _period.isAll ? null : DateTime(_period.year!, _period.month ?? 1),
+      until: _period.isAll
+          ? null
+          : _period.month == null
+          ? DateTime(_period.year! + 1)
+          : DateTime(_period.year!, _period.month! + 1),
+      search: _filterText,
+      sort: switch (_sortCol) {
+        _SortCol.no => ReportSort.number,
+        _SortCol.kategori => ReportSort.category,
+        _SortCol.jumlah => ReportSort.amount,
+        _SortCol.tanggal => ReportSort.date,
+      },
+      ascending: _sortAscending,
+    ),
+  );
 
   void _onStateChanged() {
     if (mounted) {
@@ -78,6 +105,7 @@ class _DataTablePageState extends State<DataTablePage> {
       if (!opts.contains(_period)) {
         _period = const _PeriodFilter();
       }
+      _configureReport();
       setState(() {});
     }
   }
@@ -87,67 +115,14 @@ class _DataTablePageState extends State<DataTablePage> {
   /// Semua transaksi dari AppState (sumber tunggal, bukan MockData).
   List<TransactionModel> get _allTx => AppState.instance.transactions;
 
-  /// Transaksi yang sudah difilter periode.
-  List<TransactionModel> get _periodFiltered {
-    if (_period.isAll) return _allTx;
-    if (_period.month == null) {
-      // filter seluruh tahun
-      return _allTx.where((t) => t.date.year == _period.year).toList();
-    }
-    return FinanceSummary.filterMonth(
-      _allTx,
-      year: _period.year!,
-      month: _period.month!,
-    );
-  }
-
-  /// Transaksi setelah filter periode + pencarian teks.
-  List<TransactionModel> get _displayRows {
-    var rows = _periodFiltered.toList();
-
-    if (_filterText.isNotEmpty) {
-      final q = _filterText.toLowerCase();
-      rows = rows
-          .where(
-            (t) =>
-                t.category.toLowerCase().contains(q) ||
-                t.description.toLowerCase().contains(q),
-          )
-          .toList();
-    }
-
-    // Sort
-    rows.sort((a, b) {
-      int cmp;
-      switch (_sortCol) {
-        case _SortCol.no:
-          // A06: tie-breaker stabil: tanggal terbaru dulu, lalu ID lexicographic
-          final dc = b.date.compareTo(a.date);
-          cmp = dc != 0 ? dc : a.id.compareTo(b.id);
-        case _SortCol.kategori:
-          cmp = a.category.compareTo(b.category);
-          if (cmp == 0) cmp = b.date.compareTo(a.date);
-          if (cmp == 0) cmp = a.id.compareTo(b.id);
-        case _SortCol.jumlah:
-          final av = a.isIncome ? a.amount : -a.amount;
-          final bv = b.isIncome ? b.amount : -b.amount;
-          cmp = av.compareTo(bv);
-          if (cmp == 0) cmp = a.id.compareTo(b.id);
-        case _SortCol.tanggal:
-          cmp = a.date.compareTo(b.date);
-          if (cmp == 0) cmp = a.id.compareTo(b.id);
-      }
-      return _sortAscending ? cmp : -cmp;
-    });
-
-    return rows;
-  }
+  /// Complete matching selection, independently of the visible table page.
+  List<TransactionModel> get _displayRows => _report.report.rows;
 
   // ── Ringkasan mengikuti filter aktif ──────────────────────────────────
 
-  BigInt get _summaryIncome => FinanceSummary.totalIncome(_periodFiltered);
-  BigInt get _summaryExpense => FinanceSummary.totalExpense(_periodFiltered);
-  BigInt get _summaryNet => FinanceSummary.netCashFlow(_periodFiltered);
+  BigInt get _summaryIncome => _report.report.income;
+  BigInt get _summaryExpense => _report.report.expense;
+  BigInt get _summaryNet => _report.report.net;
 
   // ── Pilihan periode (bulan-bulan yang ada di data + "Semua") ──────────
 
@@ -180,6 +155,7 @@ class _DataTablePageState extends State<DataTablePage> {
         _sortAscending = col == _SortCol.kategori; // kategori default A-Z
       }
     });
+    _configureReport();
   }
 
   void _resetFilters() {
@@ -190,15 +166,23 @@ class _DataTablePageState extends State<DataTablePage> {
       _sortAscending = false;
       _searchCtrl.clear();
     });
+    _configureReport();
   }
 
   Future<void> _export() async {
-    if (_exporting) return;
+    if (_exporting || !_report.report.source.canExport) return;
     // A08: Bekukan snapshot saat ekspor dimulai — perubahan stream setelah
     // ini tidak masuk ke file yang sedang dibuat.
-    final snapshot = _displayRows.toList();
+    final captured = _report.captureExport();
+    final snapshot = captured.rows;
     final snapshotPeriod = _period.label;
+    final snapshotSearch = _filterText.trim();
     final snapshotUid = AppState.instance.sessionUid;
+    final snapshotRevision = AppState.instance.sessionRevision;
+    bool isCurrent() =>
+        mounted &&
+        AppState.instance.sessionUid == snapshotUid &&
+        AppState.instance.sessionRevision == snapshotRevision;
 
     if (snapshot.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -218,10 +202,12 @@ class _DataTablePageState extends State<DataTablePage> {
       final result = await CsvExporter.export(
         transactions: snapshot,
         periodLabel: snapshotPeriod,
+        search: snapshotSearch,
+        isCurrent: isCurrent,
       );
       // A08: Periksa UID tidak berubah selama ekspor berlangsung
       if (!mounted) return;
-      if (AppState.instance.sessionUid != snapshotUid) {
+      if (!isCurrent()) {
         // Sesi berubah — abaikan hasil tanpa menampilkan sukses
         return;
       }
@@ -262,6 +248,8 @@ class _DataTablePageState extends State<DataTablePage> {
   @override
   void dispose() {
     AppState.instance.removeListener(_onStateChanged);
+    _report.removeListener(_onReportChanged);
+    _report.dispose();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -293,9 +281,17 @@ class _DataTablePageState extends State<DataTablePage> {
                   message: 'Ekspor CSV',
                   child: IconButton(
                     icon: const Icon(Icons.download_outlined),
-                    onPressed: _export,
+                    onPressed: _report.report.source.canExport ? _export : null,
                   ),
                 ),
+          IconButton(
+            key: const Key('report-reload'),
+            tooltip: 'Muat ulang laporan',
+            onPressed: state.transactionsLoading
+                ? null
+                : state.retryTransactions,
+            icon: const Icon(Icons.refresh),
+          ),
         ],
       ),
       body: Column(
@@ -326,7 +322,7 @@ class _DataTablePageState extends State<DataTablePage> {
   }
 
   Widget _buildContent(BuildContext context) {
-    final rows = _displayRows;
+    final rows = _report.visibleRows;
     final periodOptions = _buildPeriodOptions();
     final hasActiveFilter = _filterText.isNotEmpty || !_period.isAll;
     final allEmpty = _allTx.isEmpty;
@@ -335,6 +331,29 @@ class _DataTablePageState extends State<DataTablePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (!_report.report.source.canExport)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(
+              _report.report.source.fromCache
+                  ? 'Data dari cache. Ringkasan belum dipastikan lengkap; tunggu konfirmasi server untuk ekspor.'
+                  : 'Menunggu konfirmasi data. Ekspor tersedia setelah laporan lengkap dimuat.',
+              key: const Key('report-completeness'),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        if (_report.loadingPage) const LinearProgressIndicator(minHeight: 2),
+        if (_report.pageNotice != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+            child: Text(
+              _report.pageNotice!,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
         // ── Ringkasan (mengikuti filter aktif) ─────────────────────
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -369,7 +388,7 @@ class _DataTablePageState extends State<DataTablePage> {
               // A06: label scope menjelaskan angka mana yang ditampilkan
               _filterText.isNotEmpty && !_period.isAll
                   ? 'Ringkasan untuk periode "${_period.label}", '
-                        'pencarian "$_filterText" — ${_periodFiltered.length} transaksi'
+                        'pencarian "$_filterText" — ${_displayRows.length} transaksi'
                   : _filterText.isNotEmpty
                   ? 'Ringkasan untuk pencarian "$_filterText" — '
                         '${_displayRows.length} dari ${_allTx.length} transaksi'
@@ -402,6 +421,7 @@ class _DataTablePageState extends State<DataTablePage> {
                             onPressed: () {
                               _searchCtrl.clear();
                               setState(() => _filterText = '');
+                              _configureReport();
                             },
                           )
                         : null,
@@ -411,7 +431,10 @@ class _DataTablePageState extends State<DataTablePage> {
                     ),
                     isDense: true,
                   ),
-                  onChanged: (v) => setState(() => _filterText = v),
+                  onChanged: (v) {
+                    setState(() => _filterText = v);
+                    _configureReport();
+                  },
                 ),
               ),
               const SizedBox(width: 8),
@@ -424,7 +447,10 @@ class _DataTablePageState extends State<DataTablePage> {
                 selected: periodOptions.contains(_period)
                     ? _period
                     : const _PeriodFilter(),
-                onChanged: (p) => setState(() => _period = p),
+                onChanged: (p) {
+                  setState(() => _period = p);
+                  _configureReport();
+                },
               ),
             ],
           ),
@@ -440,7 +466,7 @@ class _DataTablePageState extends State<DataTablePage> {
                     ? 'Belum ada transaksi'
                     : filteredEmpty
                     ? 'Tidak ada hasil yang cocok'
-                    : '${rows.length} transaksi',
+                    : '${_displayRows.length} transaksi',
                 style: GoogleFonts.lato(
                   color: AppColors.textMuted,
                   fontSize: 11,
@@ -510,6 +536,37 @@ class _DataTablePageState extends State<DataTablePage> {
                 )
               : _buildTable(context, rows),
         ),
+        if (_displayRows.length > _report.pageSize)
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  Text(
+                    '${_report.firstRow}–${_report.lastRow} dari ${_displayRows.length} transaksi',
+                    key: const Key('report-page-range'),
+                  ),
+                  IconButton(
+                    key: const Key('report-previous'),
+                    tooltip: 'Halaman sebelumnya',
+                    onPressed: _report.hasPrevious
+                        ? _report.previousPage
+                        : null,
+                    icon: const Icon(Icons.chevron_left),
+                  ),
+                  IconButton(
+                    key: const Key('report-next'),
+                    tooltip: 'Halaman berikutnya',
+                    onPressed: _report.hasNext ? _report.nextPage : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -575,7 +632,7 @@ class _DataTablePageState extends State<DataTablePage> {
                             SizedBox(
                               width: 36,
                               child: Text(
-                                '${idx + 1}',
+                                '${_report.firstRow + idx}',
                                 style: GoogleFonts.lato(
                                   color: AppColors.textMuted,
                                   fontSize: 12,
@@ -640,7 +697,11 @@ class _DataTablePageState extends State<DataTablePage> {
                     }),
 
                     // ── Footer total (dari periode terfilter) ─────────
-                    _TableFooter(net: _summaryNet, periodLabel: _period.label),
+                    _TableFooter(
+                      net: _summaryNet,
+                      periodLabel:
+                          '${_period.label}${_filterText.trim().isEmpty ? '' : '; hasil pencarian'}',
+                    ),
                   ],
                 ),
               ),
