@@ -736,6 +736,17 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
   late DateTime _selectedDate;
   CategoryMeta? _selectedCategory;
 
+  /// Kategori asal transaksi lama (dari `existing`), dipisah dari pilihan
+  /// baru [_selectedCategory]. null bila bukan mode edit.
+  String? _originalCategory;
+
+  /// Jenis asal transaksi lama (`existing.isIncome`), dipisah dari pilihan
+  /// baru. Tidak pernah diturunkan ulang dari kategori. null bila bukan edit.
+  bool? _originalIsIncome;
+
+  /// true setelah pengguna secara eksplisit memilih kategori di dropdown.
+  bool _categoryChanged = false;
+
   // Anti double-submit
   bool _saving = false;
   String? _saveError;
@@ -756,7 +767,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     return _descCtrl.text.trim() != ex.description ||
         _amountCtrl.text.trim() != ex.amount.toStringAsFixed(0) ||
         !CalendarDate.same(_selectedDate, ex.date) ||
-        (_selectedCategory != null && _selectedCategory!.name != ex.category);
+        _categoryChanged;
   }
 
   @override
@@ -769,6 +780,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     );
     _selectedDate = ex?.date ?? DateTime.now();
     if (ex != null) {
+      // A02: kategori & jenis asal disimpan terpisah dari pilihan baru.
+      _originalCategory = ex.category;
+      _originalIsIncome = ex.isIncome;
       final match = CategoryMeta.knownCategories
           .where((c) => c.name == ex.category)
           .firstOrNull;
@@ -906,11 +920,47 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
   // ── Save ──────────────────────────────────────────────────────────────
 
+  /// true bila pengguna secara eksplisit mengganti kategori (pilihan baru)
+  /// ke kategori yang berbeda dari kategori asal.
+  bool get _explicitCategoryChange =>
+      _categoryChanged &&
+      _selectedCategory != null &&
+      _selectedCategory!.name != _originalCategory;
+
+  /// Kategori efektif saat simpan.
+  ///
+  /// - Perubahan kategori eksplisit → pakai pilihan baru.
+  /// - Edit tanpa perubahan kategori → pertahankan kategori asal apa adanya,
+  ///   termasuk kategori tak dikenal; tidak di-fallback ke pilihan pertama.
+  /// - Tambah baru → pilihan kategori (wajib).
+  String _effectiveCategory(CategoryMeta? picked) {
+    if (_explicitCategoryChange) return picked!.name;
+    final original = _originalCategory;
+    if (_isEdit && original != null) return original;
+    return picked!.name;
+  }
+
+  /// Jenis efektif saat simpan (pemasukan/pengeluaran).
+  ///
+  /// TIDAK diturunkan ulang dari kategori ketika hanya keterangan berubah.
+  /// - Perubahan kategori/jenis eksplisit → jenis mengikuti pilihan baru.
+  /// - Edit tanpa perubahan kategori → pertahankan `originalIsIncome`,
+  ///   termasuk kategori dikenal dengan jenis legacy yang tidak selaras.
+  /// - Tambah baru → jenis pilihan kategori (wajib).
+  bool _effectiveIsIncome(CategoryMeta? picked) {
+    if (_explicitCategoryChange) return picked!.isIncome;
+    final original = _originalIsIncome;
+    if (_isEdit && original != null) return original;
+    return picked!.isIncome;
+  }
+
   Future<void> _save() async {
     setState(() => _saveError = null);
 
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedCategory == null) {
+    // A02: mode edit tanpa perubahan kategori tetap boleh disimpan —
+    // kategori tak dikenal memakai kategori asal. Mode tambah baru wajib pilih.
+    if (_selectedCategory == null && !(_isEdit && !_categoryChanged)) {
       setState(() => _saveError = 'Pilih kategori terlebih dahulu');
       return;
     }
@@ -929,21 +979,21 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     setState(() => _saving = true);
 
     try {
-      final cat = _selectedCategory!;
+      final cat = _selectedCategory;
       final tx =
           widget.existing?.copyWith(
-            category: cat.name,
+            category: _effectiveCategory(cat),
             description: _descCtrl.text.trim(),
             amount: amount,
-            isIncome: cat.isIncome,
+            isIncome: _effectiveIsIncome(cat),
             date: _selectedDate,
           ) ??
           TransactionModel(
             id: _createId ??= AppState.instance.generateId(),
-            category: cat.name,
+            category: _effectiveCategory(cat),
             description: _descCtrl.text.trim(),
             amount: amount,
-            isIncome: cat.isIncome,
+            isIncome: _effectiveIsIncome(cat),
             date: _selectedDate,
           );
 
@@ -1132,7 +1182,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                                     Expanded(
                                       child: Text(
                                         'Kategori "$_unknownCategory" tidak dikenal. '
-                                        'Pilih kategori baru untuk melanjutkan.',
+                                        'Kategori asal tetap disimpan jika tidak diubah.',
                                         style: GoogleFonts.lato(
                                           color: cs.onErrorContainer,
                                           fontSize: 11,
@@ -1147,7 +1197,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                           // gunakan FormField + DropdownButton untuk controlled state.
                           FormField<CategoryMeta>(
                             initialValue: _selectedCategory,
-                            validator: (v) => v == null
+                            // A02: mode edit boleh null (kategori asal
+                            // dipertahankan, termasuk kategori tak dikenal).
+                            validator: (v) => v == null && !_isEdit
                                 ? 'Pilih kategori terlebih dahulu'
                                 : null,
                             builder: (field) {
@@ -1185,6 +1237,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                                           if (v == null) return;
                                           setState(() {
                                             _selectedCategory = v;
+                                            // Perubahan kategori eksplisit.
+                                            _categoryChanged = true;
+                                            _unknownCategory = null;
                                             _isDirty = _checkDirty();
                                           });
                                           field.didChange(v);
