@@ -99,12 +99,12 @@ class _DataTablePageState extends State<DataTablePage> {
 
   void _onStateChanged() {
     if (mounted) {
-      // A05: jaga invariant — jika bulan terpilih tidak ada lagi di data,
-      // reset ke "Semua" agar DropdownButton tidak menerima value tak dikenal.
-      final opts = _buildPeriodOptions();
-      if (!opts.contains(_period)) {
-        _period = const _PeriodFilter();
-      }
+      // A05: jangan reset _period secara otomatis saat bulan hilang dari data.
+      // Jika bulan yang dipilih tidak lagi ada di opsi, defensive guard di
+      // _PeriodDropdown (selected: periodOptions.contains(_period) ? _period
+      // : const _PeriodFilter()) menampilkan "Semua" secara visual, sementara
+      // _configureReport() menghasilkan baris kosong → empty state tampil.
+      // Reset hanya terjadi lewat tindakan pengguna eksplisit (_resetFilters).
       _configureReport();
       setState(() {});
     }
