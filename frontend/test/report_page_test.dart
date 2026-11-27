@@ -98,6 +98,30 @@ void main() {
     },
   );
 
+  testWidgets('search retains focus while characters arrive across rebuilds', (
+    tester,
+  ) async {
+    await mount(tester);
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    tester.testTextInput.enterText('p');
+    await tester.pump();
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+      isTrue,
+    );
+    tester.testTextInput.enterText('pr');
+    await tester.pump();
+    tester.testTextInput.enterText('needle');
+    await tester.pumpAndSettle();
+    expect(find.text('2 transaksi'), findsOneWidget);
+    expect(
+      tester.widget<EditableText>(find.byType(EditableText)).focusNode.hasFocus,
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('analytics receives every row after paging the table', (
     tester,
   ) async {

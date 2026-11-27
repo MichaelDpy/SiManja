@@ -179,6 +179,7 @@ class _DataTablePageState extends State<DataTablePage> {
     final snapshotSearch = _filterText.trim();
     final snapshotUid = AppState.instance.sessionUid;
     final snapshotRevision = AppState.instance.sessionRevision;
+    final snapshotLease = AppState.instance.exportLease;
     bool isCurrent() =>
         mounted &&
         AppState.instance.sessionUid == snapshotUid &&
@@ -204,6 +205,7 @@ class _DataTablePageState extends State<DataTablePage> {
         periodLabel: snapshotPeriod,
         search: snapshotSearch,
         isCurrent: isCurrent,
+        lease: snapshotLease,
       );
       // A08: Periksa UID tidak berubah selama ekspor berlangsung
       if (!mounted) return;
@@ -401,12 +403,14 @@ class _DataTablePageState extends State<DataTablePage> {
 
         // ── Filter bar ──────────────────────────────────────────────
         Padding(
+          key: const ValueKey('report-filter-bar'),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
               // Pencarian
               Expanded(
                 child: TextField(
+                  key: const ValueKey('report-search'),
                   controller: _searchCtrl,
                   style: GoogleFonts.lato(
                     color: Theme.of(context).colorScheme.onSurface,

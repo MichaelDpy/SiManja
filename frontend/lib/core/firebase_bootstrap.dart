@@ -5,6 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import 'firebase_environment.dart';
+import 'firestore_cache_policy.dart';
+import 'session_artifacts.dart';
 
 /// Satu-satunya titik inisialisasi Firebase (app default).
 ///
@@ -76,6 +78,13 @@ abstract final class FirebaseBootstrap {
           ),
         );
       }
+    }
+
+    FirestoreCachePolicy.configure(firestore);
+    try {
+      await SessionExportStore.instance.prepare();
+    } catch (_) {
+      // Finance/Auth can start; export retries preparation and fails safely.
     }
 
     if (config.usesEmulators && !_emulatorsConnected) {

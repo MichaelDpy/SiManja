@@ -259,7 +259,7 @@ class _ProfilePageState extends State<ProfilePage> {
         builder: (ctx) => AlertDialog(
           title: const Text('Keluar dari Akun?'),
           content: const Text(
-            'Profil yang sudah tersimpan tetap ada pada akun. Perubahan yang masih diproses belum terjamin tersimpan. Foto dan data lokal sesi ini akan dibersihkan.',
+            'Profil yang sudah tersimpan tetap ada pada akun. Perubahan yang masih diproses belum terjamin tersimpan. Tampilan sesi dan tautan foto akan dikosongkan. Salinan yang sudah dibagikan tidak dapat ditarik kembali.',
           ),
           actions: [
             TextButton(

@@ -1,11 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'rupiah.dart';
+import 'session_artifacts.dart';
 import '../models/transaction_model.dart';
 
 /// Utilitas ekspor transaksi ke file CSV.
@@ -29,8 +28,10 @@ abstract final class CsvExporter {
     required String periodLabel,
     String search = '',
     bool Function()? isCurrent,
+    SessionExportLease? lease,
   }) async {
-    bool current() => isCurrent?.call() ?? true;
+    final files = lease ?? SessionExportStore.instance.newLease();
+    bool current() => files.isActive && (isCurrent?.call() ?? true);
     if (!current()) return const CsvExportResult.stale();
     if (transactions.isEmpty) {
       return const CsvExportResult.empty();
@@ -39,17 +40,15 @@ abstract final class CsvExporter {
     try {
       final csvBytes = encode(transactions, periodLabel, search: search);
 
-      final dir = await getTemporaryDirectory();
-      if (!current()) return const CsvExportResult.stale();
       final safePeriod = periodLabel
           .replaceAll(RegExp(r'[^\w\-]'), '_')
           .replaceAll(RegExp(r'_+'), '_');
       final fileName =
           'simanja_transaksi_${safePeriod}_${DateTime.now().microsecondsSinceEpoch}_${_exportSequence++}.csv';
-      final file = File('${dir.path}/$fileName');
-      await file.writeAsBytes(csvBytes, flush: true);
+      final file = await files.write(csvBytes, fileName, isCurrent: current);
+      if (file == null) return const CsvExportResult.stale();
       if (!current()) {
-        await file.delete();
+        await files.discard(file);
         return const CsvExportResult.stale();
       }
 
@@ -64,6 +63,7 @@ abstract final class CsvExporter {
       }
       return const CsvExportResult.success();
     } catch (_) {
+      if (!current()) return const CsvExportResult.stale();
       return const CsvExportResult.failure(
         'Berkas CSV belum dapat dibagikan. Coba lagi.',
       );
