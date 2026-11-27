@@ -130,15 +130,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   void _nextPeriod() {
     final now = DateTime.now();
     final next = DateTime(_referenceMonth.year, _referenceMonth.month + 1);
-    // Tidak boleh melebihi bulan sekarang
-    if (!next.isAfter(DateTime(now.year, now.month))) {
+    // Batas maju: selaras dengan lastDate picker kalender (31 Des tahun+1).
+    // Transaksi masa depan yang sah (A1-04) harus bisa dituju di analitik.
+    if (!next.isAfter(DateTime(now.year + 1, 12))) {
       setState(() => _referenceMonth = next);
     }
   }
 
   bool get _canGoNext {
     final now = DateTime.now();
-    return _referenceMonth.isBefore(DateTime(now.year, now.month));
+    return _referenceMonth.isBefore(DateTime(now.year + 1, 12));
   }
 
   String get _rangeLabel {
