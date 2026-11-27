@@ -1294,7 +1294,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                             // A1-03: Done = submit; guard _saving memastikan
                             // submit ganda (Done + tap) paling banyak satu
                             // operasi; input tidak dibersihkan saat gagal.
-                            onSubmitted: (_) => _save(),
+                            onFieldSubmitted: (_) => _save(),
                             style: GoogleFonts.lato(
                               color: cs.onSurface,
                               fontSize: 14,
