@@ -153,6 +153,15 @@ class _EmailVerificationBannerState extends State<EmailVerificationBanner>
       _Tone.error => colors.error,
       _ => colors.onTertiaryContainer,
     };
+    // Warna primer (teal) tidak terbaca di atas tertiaryContainer; tombol
+    // memakai pasangan "on" yang kontrasnya dijamin ColorScheme.
+    final buttonStyle = TextButton.styleFrom(
+      foregroundColor: colors.onTertiaryContainer,
+      disabledForegroundColor: colors.onTertiaryContainer.withValues(
+        alpha: 0.6,
+      ),
+      textStyle: const TextStyle(fontWeight: FontWeight.w700),
+    );
 
     return Material(
       color: colors.tertiaryContainer,
@@ -225,6 +234,7 @@ class _EmailVerificationBannerState extends State<EmailVerificationBanner>
                   children: [
                     TextButton(
                       key: const Key('verify-send'),
+                      style: buttonStyle,
                       onPressed: _sending || _cooldownLeft > 0 ? null : _send,
                       child: Text(
                         _sending
@@ -236,6 +246,7 @@ class _EmailVerificationBannerState extends State<EmailVerificationBanner>
                     ),
                     TextButton(
                       key: const Key('verify-check'),
+                      style: buttonStyle,
                       onPressed: _checking ? null : () => _check(),
                       child: Text(_checking ? 'Memeriksa…' : 'Periksa'),
                     ),
