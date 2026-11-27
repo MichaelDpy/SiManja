@@ -50,8 +50,9 @@ class _ProfilePageState extends State<ProfilePage> {
     _kotaCtrl = TextEditingController(text: s.city);
     _pekerjaanCtrl = TextEditingController(text: s.job);
     // Tampilkan angka bulat tanpa separator saat edit
+    // A1-03: pendapatan nol dipertahankan ('0', bukan dikosongkan); kosong→0.
     _pendapatanCtrl = TextEditingController(
-      text: s.monthlyIncome > 0 ? s.monthlyIncome.toInt().toString() : '',
+      text: s.monthlyIncome.toInt().toString(),
     );
     AppState.instance.addListener(_onStateChanged);
   }
@@ -166,7 +167,8 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_pendapatanCtrl.text.trim().isNotEmpty && income == null) {
       setState(
         () => _saveError =
-            'Pendapatan harus berupa angka bulat rupiah yang valid',
+            // A1-03: pesan selaras validator field & kontrak domain.
+            'Pendapatan harus berupa angka bulat non-negatif',
       );
       return;
     }

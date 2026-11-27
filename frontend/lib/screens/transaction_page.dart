@@ -1263,17 +1263,16 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                               labelText: 'Keterangan',
                               prefixIcon: Icon(Icons.notes_outlined),
                             ),
-                            // A03: batas 1000 sesuai TransactionMapper.toMap
-                            maxLength: 1000,
+                            // A1-03: batas selaras kontrak TransactionMapper.toMap —
+                            // keterangan non-empty (min. 1 karakter non-space)
+                            // & panjang ter-trim <=1000. Tidak memakai maxLength
+                            // mentah agar 1001 invalid (bukan diam-diam dipotong).
                             textCapitalization: TextCapitalization.sentences,
                             // A09: Next membawa fokus ke field berikutnya
                             textInputAction: TextInputAction.next,
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) {
                                 return 'Keterangan wajib diisi';
-                              }
-                              if (v.trim().length < 2) {
-                                return 'Keterangan minimal 2 karakter';
                               }
                               if (v.trim().length > 1000) {
                                 return 'Keterangan maksimal 1000 karakter';
@@ -1292,6 +1291,10 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                             inputFormatters: [_RupiahInputFormatter()],
                             // A09: Done menutup keyboard setelah field terakhir
                             textInputAction: TextInputAction.done,
+                            // A1-03: Done = submit; guard _saving memastikan
+                            // submit ganda (Done + tap) paling banyak satu
+                            // operasi; input tidak dibersihkan saat gagal.
+                            onSubmitted: (_) => _save(),
                             style: GoogleFonts.lato(
                               color: cs.onSurface,
                               fontSize: 14,
