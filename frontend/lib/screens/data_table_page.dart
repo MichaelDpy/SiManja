@@ -215,8 +215,21 @@ class _DataTablePageState extends State<DataTablePage> {
       }
 
       if (result.isSuccess) {
-        // Share sheet sudah terbuka — tidak klaim "berhasil tersimpan"
-        // karena file baru tersimpan setelah pengguna memilih tujuan.
+        // Share sheet sudah terbuka dan pengguna memilih tujuan.
+        // Tidak klaim "berhasil tersimpan" — file baru tersimpan setelah
+        // pengguna memilih tujuan di sisi OS/aplikasi penerima.
+      } else if (result.isUnavailable) {
+        // A1-08: Platform meluncurkan share sheet tetapi tidak melaporkan
+        // apakah pengguna memilih tujuan (misalnya iOS/Web). File sudah
+        // diserahkan ke OS — tidak dapat dicabut dan tidak terkonfirmasi diterima.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Berkas dibagikan. Konfirmasi penerimaan bergantung pada aplikasi tujuan.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       } else if (result.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -239,7 +252,8 @@ class _DataTablePageState extends State<DataTablePage> {
           ),
         );
       }
-      // isCancelled: pengguna menutup share sheet — tidak perlu feedback
+      // isCancelled/isStale: pengguna menutup share sheet atau sesi berubah
+      // — tidak perlu feedback tambahan
     } finally {
       if (mounted) setState(() => _exporting = false);
     }

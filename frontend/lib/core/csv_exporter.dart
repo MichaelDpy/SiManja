@@ -73,10 +73,17 @@ abstract final class CsvExporter {
       ], subject: 'Data Transaksi SIMANJA — $periodLabel');
       if (!current()) return const CsvExportResult.stale();
 
-      if (result.status == ShareResultStatus.dismissed) {
-        return const CsvExportResult.cancelled();
-      }
-      return const CsvExportResult.success();
+      // A1-08: Bedakan tiga nilai ShareResultStatus secara eksplisit.
+      // - success: pengguna memilih tujuan — share sheet ditutup dengan aksi.
+      // - dismissed: pengguna menutup share sheet tanpa memilih — bukan sukses.
+      // - unavailable: platform meluncurkan share tapi aksi pengguna tidak bisa
+      //   dikonfirmasi (misalnya iOS/Web yang tidak melaporkan hasil). Ini bukan
+      //   kegagalan teknis dan BUKAN konfirmasi penerimaan — gunakan unavailable.
+      return switch (result.status) {
+        ShareResultStatus.success => const CsvExportResult.success(),
+        ShareResultStatus.dismissed => const CsvExportResult.cancelled(),
+        ShareResultStatus.unavailable => const CsvExportResult.unavailable(),
+      };
     } catch (_) {
       if (!current()) return const CsvExportResult.stale();
       return const CsvExportResult.failure(
@@ -314,7 +321,7 @@ abstract final class CsvExporter {
 
 // ── Result type ───────────────────────────────────────────────────────────
 
-enum _CsvExportStatus { success, empty, cancelled, stale, failure }
+enum _CsvExportStatus { success, empty, cancelled, stale, failure, unavailable }
 
 class CsvExportResult {
   final _CsvExportStatus _status;
@@ -329,9 +336,16 @@ class CsvExportResult {
   const CsvExportResult.failure(String message)
     : this._(_CsvExportStatus.failure, errorMessage: message);
 
+  /// Share diluncurkan tetapi platform tidak melaporkan apakah pengguna
+  /// memilih tujuan. Konten sudah diserahkan ke OS — tidak dapat dicabut.
+  const CsvExportResult.unavailable() : this._(_CsvExportStatus.unavailable);
+
   bool get isSuccess => _status == _CsvExportStatus.success;
   bool get isEmpty => _status == _CsvExportStatus.empty;
   bool get isCancelled => _status == _CsvExportStatus.cancelled;
   bool get isStale => _status == _CsvExportStatus.stale;
   bool get isFailure => _status == _CsvExportStatus.failure;
+
+  /// True bila share diluncurkan namun konfirmasi aksi pengguna tidak tersedia.
+  bool get isUnavailable => _status == _CsvExportStatus.unavailable;
 }
