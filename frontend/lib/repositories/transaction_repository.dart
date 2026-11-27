@@ -6,6 +6,7 @@ import '../core/calendar_date.dart';
 import '../core/rupiah.dart';
 import '../models/transaction_model.dart';
 import '../models/record_version.dart';
+import '../models/transaction_history.dart';
 import 'record_concurrency.dart';
 
 class TransactionSnapshot {
@@ -122,7 +123,8 @@ abstract final class TransactionMapper {
   }
 }
 
-class FirestoreTransactionRepository implements TransactionRepository {
+class FirestoreTransactionRepository
+    implements TransactionRepository, TransactionHistoryRepository {
   FirestoreTransactionRepository(FirebaseFirestore database)
     : _database = (() => database);
   FirestoreTransactionRepository.lazy(this._database);
@@ -159,6 +161,53 @@ class FirestoreTransactionRepository implements TransactionRepository {
           hasPendingWrites: snapshot.metadata.hasPendingWrites,
         ),
       );
+
+  @override
+  Future<TransactionHistoryPage> loadHistory(
+    String uid,
+    TransactionHistoryQuery query, {
+    TransactionHistoryCursor? after,
+  }) async {
+    TransactionMapper.validateId(uid);
+    query.validateCursor(uid, after);
+    Query<Map<String, dynamic>> request = _collection(uid)
+        .where('dateVersion', isEqualTo: TransactionMapper.dateVersion);
+    if (query.from case final from?) {
+      request = request.where(
+        'date',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(from),
+      );
+    }
+    if (query.until case final until?) {
+      request = request.where('date', isLessThan: Timestamp.fromDate(until));
+    }
+    request = request
+        .orderBy('date', descending: true)
+        .orderBy(FieldPath.documentId, descending: true);
+    if (after != null) {
+      // Values, not a refetch of a possibly deleted boundary document.
+      request = request.startAfter([Timestamp.fromDate(after.date), after.id]);
+    }
+    final snapshot = await request
+        .limit(query.pageSize + 1)
+        .get(const GetOptions(source: Source.server));
+    return TransactionHistoryPage.fromLookahead(
+      uid: uid,
+      query: query,
+      after: after,
+      records: snapshot.docs
+          .map(
+            (document) => TransactionMapper.fromMap(
+              document.id,
+              document.data(),
+              allowPendingTimestamps: document.metadata.hasPendingWrites,
+            ),
+          )
+          .toList(),
+      fromCache: snapshot.metadata.isFromCache,
+      hasPendingWrites: snapshot.metadata.hasPendingWrites,
+    );
+  }
 
   @override
   Future<void> add(String uid, TransactionModel transaction) async {
