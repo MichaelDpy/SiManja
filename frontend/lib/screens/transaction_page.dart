@@ -305,16 +305,12 @@ class _TransactionPageState extends State<TransactionPage>
           // ── Ringkasan Akun (data contoh) ──────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SectionHeader(
-                    title: 'Ringkasan Akun',
-                    actionLabel: 'Kelola',
-                    onAction: () {},
-                  ),
-                ),
-              ],
+            child: Text(
+              'Ringkasan Akun',
+              style: GoogleFonts.lato(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           // Label data contoh — sesuai kontrak B2
