@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -12,6 +10,7 @@ import '../core/app_state.dart';
 import '../core/finance_summary.dart';
 import '../widgets/section_header.dart';
 import '../widgets/account_card.dart';
+import '../widgets/local_avatar.dart';
 
 /// Model periode untuk filter ringkasan arus kas di Dasbor.
 class _DashboardPeriod {
@@ -197,16 +196,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _onStateChanged() {
     if (mounted) setState(() {});
-  }
-
-  static ImageProvider? _avatarImage(String? path) {
-    if (path == null || path.isEmpty) return null;
-    try {
-      final file = File(path);
-      return file.existsSync() ? FileImage(file) : null;
-    } catch (_) {
-      return null;
-    }
   }
 
   /// Membangun daftar pilihan periode dari seri transaksi 6 bulan terakhir.
@@ -595,26 +584,19 @@ class _DashboardPageState extends State<DashboardPage> {
                         customBorder: const CircleBorder(),
                         child: Padding(
                           padding: const EdgeInsets.all(4),
-                          child: Builder(
-                            builder: (_) {
-                              final avatar = _avatarImage(state.photoPath);
-                              return CircleAvatar(
-                                radius: 19,
-                                backgroundColor: AppColors.teal.withValues(
-                                  alpha: 0.2,
-                                ),
-                                backgroundImage: avatar,
-                                // File foto lokal hilang → ikon fallback,
-                                // sama dengan perilaku avatar di Profil.
-                                child: avatar == null
-                                    ? const Icon(
-                                        Icons.person,
-                                        color: AppColors.teal,
-                                        size: 20,
-                                      )
-                                    : null,
-                              );
-                            },
+                          // A1-11: fallback tahan file hilang/korup/race
+                          // (exists saja tidak cukup; no errorBuilder di
+                          // CircleAvatar) via SafeLocalAvatar. Sama dengan
+                          // perilaku avatar di Profil.
+                          child: SafeLocalAvatar(
+                            imagePath: state.photoPath,
+                            radius: 19,
+                            backgroundColor: AppColors.teal.withValues(
+                              alpha: 0.2,
+                            ),
+                            fallbackIcon: Icons.person,
+                            fallbackIconColor: AppColors.teal,
+                            fallbackIconSize: 20,
                           ),
                         ),
                       ),

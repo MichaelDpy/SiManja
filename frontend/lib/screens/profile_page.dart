@@ -11,6 +11,7 @@ import '../models/user_profile.dart';
 import '../models/record_version.dart';
 import '../models/sync_failure.dart';
 import '../services/auth_service.dart';
+import '../widgets/local_avatar.dart';
 import '../widgets/session_scope.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -730,34 +731,19 @@ class _AvatarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final photoPath = state.photoPath;
-    final hasPhoto = photoPath != null && photoPath.isNotEmpty;
-
-    ImageProvider? imageProvider;
-    if (hasPhoto) {
-      final file = File(photoPath);
-      // Cek file secara sync hanya untuk ImageProvider; file tidak ada = fallback
-      try {
-        if (file.existsSync()) {
-          imageProvider = FileImage(file);
-        }
-      } catch (_) {
-        // Gagal baca file → fallback ke avatar default
-      }
-    }
-
+    // A1-11: fallback tahan file hilang/korup/race (exists saja tidak cukup;
+    // CircleAvatar tidak punya errorBuilder) via SafeLocalAvatar.
     return GestureDetector(
       onTap: onTap,
       child: Stack(
         children: [
-          CircleAvatar(
+          SafeLocalAvatar(
+            imagePath: state.photoPath,
             radius: 52,
             backgroundColor: AppColors.teal.withValues(alpha: 0.15),
-            backgroundImage: imageProvider,
-            // Fallback: ikon person jika tidak ada foto atau foto gagal dimuat
-            child: imageProvider == null
-                ? const Icon(Icons.person, color: AppColors.teal, size: 52)
-                : null,
+            fallbackIcon: Icons.person,
+            fallbackIconColor: AppColors.teal,
+            fallbackIconSize: 52,
           ),
           Positioned(
             bottom: 0,
