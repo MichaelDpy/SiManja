@@ -696,16 +696,20 @@ class _DataTablePageState extends State<DataTablePage> {
                               ),
                             ),
                             // Jumlah
-                            SizedBox(
-                              width: 140,
-                              child: Text(
-                                '$sign${_currencyFmt.rupiah(signed.abs())}',
-                                style: GoogleFonts.lato(
-                                  color: amtColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                            Tooltip(
+                              message:
+                                  '$sign${_currencyFmt.rupiah(signed.abs())}',
+                              child: SizedBox(
+                                width: 140,
+                                child: Text(
+                                  '$sign${_currencyFmt.rupiah(signed.abs())}',
+                                  style: GoogleFonts.lato(
+                                    color: amtColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             // Tanggal
@@ -986,14 +990,17 @@ class _SummaryPill extends StatelessWidget {
               label,
               style: GoogleFonts.lato(color: AppColors.textMuted, fontSize: 10),
             ),
-            Text(
-              value,
-              style: GoogleFonts.lato(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: GoogleFonts.lato(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

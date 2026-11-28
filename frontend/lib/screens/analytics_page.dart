@@ -867,14 +867,17 @@ class _MetricCard extends StatelessWidget {
                     fontSize: 10,
                   ),
                 ),
-                Text(
-                  value,
-                  style: GoogleFonts.lato(
-                    color: cs.onSurface,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: GoogleFonts.lato(
+                      color: cs.onSurface,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
                 if (subtitle != null)
                   Text(
