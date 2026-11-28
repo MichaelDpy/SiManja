@@ -1129,7 +1129,10 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         SnackBar(
           content: Text(
             _isEdit ? 'Transaksi diperbarui' : 'Transaksi ditambahkan',
-            style: GoogleFonts.lato(color: Colors.white),
+            // A1-12: gunakan onPrimary dari colorScheme untuk kontras di kedua tema
+            style: GoogleFonts.lato(
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
           ),
           backgroundColor: AppColors.teal,
           behavior: SnackBarBehavior.floating,

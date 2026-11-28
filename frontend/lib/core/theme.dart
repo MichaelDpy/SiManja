@@ -196,7 +196,9 @@ class AppTheme {
 
     const cs = ColorScheme.light(
       primary: AppColors.teal,
-      onPrimary: Colors.white,
+      // A1-12: white pada teal (#2DD4BF) hanya 1.6:1 — gagal WCAG AA.
+      // Gunakan dark text untuk kontras 8.6:1 (memenuhi AAA).
+      onPrimary: Color(0xFF003733),
       primaryContainer: Color(0xFFB2F5EE),
       onPrimaryContainer: Color(0xFF003733),
       secondary: AppColors.tealDark,
@@ -267,7 +269,11 @@ class AppTheme {
         disabled: disabledFill,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
-        style: _buildElevatedButtonStyle(bg: AppColors.teal, fg: Colors.white),
+        // A1-12: ElevatedButton light theme — dark foreground pada teal bg.
+        style: _buildElevatedButtonStyle(
+          bg: AppColors.teal,
+          fg: const Color(0xFF003733),
+        ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(

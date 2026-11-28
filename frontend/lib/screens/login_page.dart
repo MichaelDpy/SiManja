@@ -300,7 +300,8 @@ class _LoginPageState extends State<LoginPage> {
                     onPressed: _isLoading ? null : _login,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.teal,
-                      foregroundColor: Colors.white,
+                      // A1-12: gunakan onPrimary dari theme — dark di light, light di dark
+                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
                       disabledBackgroundColor: AppColors.teal.withValues(
                         alpha: 0.38,
                       ),
@@ -310,12 +311,13 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     child: _isLoading && !_googleLoading
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(
                               strokeWidth: 2.5,
-                              color: Colors.white,
+                              // A1-12: spinner ikut foreground button
+                              color: Theme.of(context).colorScheme.onPrimary,
                             ),
                           )
                         : Text(
