@@ -504,10 +504,14 @@ class AuthService implements AuthGateway {
   @override
   Future<void> unlinkProvider(ReauthGrant grant, String providerId) async {
     final user = _requireGrant(grant, SensitiveOperation.unlinkProvider);
+    final session = _SessionMark.of(user);
     await user.reload();
-    final fresh = _auth.currentUser ?? user;
+    // Setelah await, sesi bisa berganti (A→B), berakhir, atau diulang
+    // (A→B→A). Target operasi selalu pengguna pemilik grant pada sesi yang
+    // sama; pengguna baru tidak pernah dipakai sebagai pengganti.
+    final current = _requireSameSession(grant, session);
     final reason = unlinkBlockReason(
-      [for (final info in fresh.providerData) info.providerId],
+      [for (final info in current.providerData) info.providerId],
       providerId,
       googleAvailable: googleSignInAvailable,
     );
@@ -517,9 +521,42 @@ class AuthService implements AuthGateway {
         message: reason,
       );
     }
-    await fresh.unlink(providerId);
-    await fresh.reload();
+    await current.unlink(providerId);
+    if (_SessionMark.of(_auth.currentUser) == session) await current.reload();
   }
+
+  /// Pengguna saat ini, hanya bila masih sesi yang sama dengan [before] dan
+  /// grant masih berlaku untuk operasinya; selain itu `user-mismatch`.
+  User _requireSameSession(ReauthGrant grant, _SessionMark before) {
+    final current = _auth.currentUser;
+    if (current == null || _SessionMark.of(current) != before) {
+      throw FirebaseAuthException(code: 'user-mismatch');
+    }
+    if (!grant.allows(current.uid, grant.operation)) {
+      throw FirebaseAuthException(code: AuthErrorCodes.reauthMismatch);
+    }
+    return current;
+  }
+}
+
+/// Penanda satu sesi masuk: UID + waktu masuk terakhir. Masuk ulang ke UID
+/// yang sama (A→B→A) menghasilkan penanda berbeda.
+class _SessionMark {
+  const _SessionMark(this.uid, this.signedInAt);
+  final String? uid;
+  final DateTime? signedInAt;
+
+  static _SessionMark of(User? user) =>
+      _SessionMark(user?.uid, user?.metadata.lastSignInTime);
+
+  @override
+  bool operator ==(Object other) =>
+      other is _SessionMark &&
+      other.uid == uid &&
+      other.signedInAt == signedInAt;
+
+  @override
+  int get hashCode => Object.hash(uid, signedInAt);
 }
 
 /// Pemeriksaan lokal: hanya batas Firebase, tidak lebih lemah dan tidak
