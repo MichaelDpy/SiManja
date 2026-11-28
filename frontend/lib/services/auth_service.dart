@@ -353,8 +353,10 @@ class AuthService implements AuthGateway {
     return user;
   }
 
+  // async: kegagalan (mis. tanpa pengguna) dikirim lewat Future, tidak
+  // dilempar sinkron sebelum Future terbentuk.
   @override
-  Future<void> sendEmailVerification() =>
+  Future<void> sendEmailVerification() async =>
       _requireUser().sendEmailVerification();
 
   @override

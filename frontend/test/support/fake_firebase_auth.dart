@@ -53,6 +53,20 @@ class FakeUser extends Fake implements User {
   @override
   String? get email => '$uid@example.com';
 
+  /// Status verifikasi menurut "server"; terlihat setelah reload.
+  bool serverEmailVerified = false;
+  bool _emailVerified = false;
+
+  @override
+  bool get emailVerified => _emailVerified;
+
+  @override
+  Future<void> sendEmailVerification([
+    ActionCodeSettings? actionCodeSettings,
+  ]) async {
+    auth.mutations.add('$uid:sendVerification');
+  }
+
   @override
   List<UserInfo> get providerData => [
     for (final id in providers) _FakeInfo(id),
@@ -64,6 +78,7 @@ class FakeUser extends Fake implements User {
   @override
   Future<void> reload() async {
     reloads++;
+    _emailVerified = serverEmailVerified;
     await onReloadAsync?.call();
     onReload?.call();
     onReload = null;
