@@ -125,6 +125,27 @@ UID selalu diambil dari token Auth. Field `uid` di payload diabaikan. Status dis
 
 Emulator Functions berjalan di port `5001` dan ikut menyala lewat `npm.cmd run emulators`. Script itu juga memasang dependensi `functions/` lebih dulu. Untuk perangkat fisik, port 5001 juga harus dapat dijangkau, sama seperti 9099 dan 8080.
 
+### Kontrak R-DELETE (B2-07, masukan C09)
+
+Sumber kode: `backend/functions/src/deletion.js` (produsen), `frontend/lib/services/account_deletion_service.dart` (konsumen). Rules C09 menegakkan pembekuan.
+
+| Status | Arti | Write normal pengguna | Dapat dibatalkan |
+| --- | --- | --- | --- |
+| `none` (dokumen tidak ada) | Tidak ada permintaan | Dibuka | — |
+| `requested` | Diterima, menunggu worker (B11) | **Beku** | Ya |
+| `processing` | Worker menghapus data | **Beku** | Tidak |
+| `failed` | Worker gagal; data mungkin sudah terhapus sebagian | **Beku** | Tidak (ulang dengan `requestId` baru → `requested`) |
+| `completed` | Selesai | **Beku** (tombstone) | Tidak |
+| `cancelled` | Dibatalkan sebelum ada data yang dihapus | Dibuka | — |
+
+- **Transisi sah:** `none|cancelled|failed → requested` (callable), `requested → cancelled` (callable), `requested → processing → completed|failed` (worker B11, Admin SDK, transaction + `version`).
+- **Dokumen:** `accountLifecycle/{uid}`, berisi `state`, `requestId`, `requestedAtMs`, `updatedAtMs`, `version`, `previousState`, dan opsional `cancelledAtMs`. Tanpa email/PII. Hanya Admin SDK yang boleh membaca dan menulis; client tidak punya akses baca maupun tulis.
+- **Pembekuan untuk C09:** tolak create/update/delete pada `users/{uid}` dan `users/{uid}/transactions/{id}` bila dokumen `accountLifecycle/{uid}` ada dengan `state` ∈ {`requested`, `processing`, `failed`, `completed`}. `none` (dokumen tidak ada) dan `cancelled` membuka write. Uji replay token lama dan pending write setelah `completed` dimiliki B2-12 bersama C09.
+- **Otorisasi:** UID hanya dari token, `auth_time` ≤ 300 detik untuk permintaan, akun Auth aktif. `requestId` = kunci idempotensi (permintaan ulang tidak membuat job kedua). Error memakai `HttpsError` dengan `details.reason`: `unauthenticated`, `requires-recent-login`, `invalid-request-id`, `account-disabled`, `account-not-found`, `deletion-not-cancellable`.
+- **Status setelah Auth dihapus:** pemilik tidak bisa lagi memanggil callable (tidak ada token). Tidak ada pencarian status publik berbasis UID. Bukti minimum bagi pengguna adalah `requestId` yang ditampilkan saat permintaan diterima. Jalur pengecekan status setelah akun hilang (bila diperlukan) dirancang di B2-16 dengan verifikasi identitas, bukan membuka `accountLifecycle`.
+- **Retensi tombstone:** dokumen `completed` dipertahankan sebagai pengaman anti-rekreasi. **Durasinya belum diputuskan (OPEN, pemilik data/C12)**, jadi B2-12 terblokir pada keputusan ini, bukan TTL tebakan.
+- **Region/target:** `us-central1` sementara sampai region R00 diputuskan; client dan server memakai konstanta yang sama. Hanya diuji di emulator; deploy membutuhkan Blaze dan target project.
+
 ## Schema dan perilaku penyimpanan
 
 | Lokasi | Field |

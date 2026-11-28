@@ -118,6 +118,16 @@ void main() {
     }
   });
 
+  test('status beku sama dengan FROZEN_STATES backend', () {
+    expect(
+      DeletionState.values.where((s) => s.freezesWrites).map((s) => s.name),
+      unorderedEquals(['requested', 'processing', 'completed', 'failed']),
+    );
+    expect(DeletionState.cancelled.freezesWrites, isFalse);
+    expect(DeletionState.none.freezesWrites, isFalse);
+    expect(DeletionState.failed.cancellable, isFalse);
+  });
+
   test('state tak dikenal tidak dianggap selesai', () {
     final status = DeletionStatus.fromMap({'state': 'aneh'});
     expect(status.state, DeletionState.unknown);

@@ -80,5 +80,15 @@ test('status client hanya memuat field publik', () => {
 });
 
 test('status beku untuk write normal sesuai kontrak C09', () => {
-  assert.deepEqual([...FROZEN_STATES].sort(), ['completed', 'processing', 'requested']);
+  assert.deepEqual([...FROZEN_STATES].sort(), ['completed', 'failed', 'processing', 'requested']);
+});
+
+test('kegagalan parsial tetap beku; hanya none/cancelled yang membuka write', () => {
+  assert.ok(FROZEN_STATES.includes(States.failed));
+  assert.ok(!FROZEN_STATES.includes(States.cancelled));
+  assert.ok(!FROZEN_STATES.includes(States.none));
+  // Permintaan ulang setelah gagal tetap beku (requested), tidak lewat status terbuka.
+  const retry = planRequest({ state: States.failed, version: 4, requestId: 'old_0000001' },
+    { requestId: 'req_00000010', nowMs: now });
+  assert.ok(FROZEN_STATES.includes(retry.write.state));
 });

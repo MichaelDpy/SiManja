@@ -26,6 +26,14 @@ enum DeletionState {
 
   /// Proses sudah diterima server (belum tentu selesai).
   bool get accepted => this == requested || this == processing;
+
+  /// Write data akun dibekukan server (sama dengan FROZEN_STATES backend).
+  /// UI tidak boleh menawarkan pengeditan data pada status ini.
+  bool get freezesWrites =>
+      this == requested ||
+      this == processing ||
+      this == completed ||
+      this == failed;
 }
 
 class DeletionStatus {

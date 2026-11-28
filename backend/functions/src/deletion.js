@@ -14,9 +14,17 @@ export const RECENT_AUTH_MAX_AGE_SECONDS = 5 * 60;
  * - none: tidak ada permintaan aktif (dokumen tidak ada).
  * - requested: diterima, menunggu worker (B11); masih dapat dibatalkan.
  * - processing: worker berjalan; tidak dapat dibatalkan; write dibekukan (C09).
- * - completed: selesai (B11/B12); tidak dapat dibatalkan.
- * - failed: worker gagal; pemilik/operasi menindaklanjuti (B11/B12).
- * - cancelled: dibatalkan pengguna sebelum processing.
+ * - completed: selesai (B11/B12); tidak dapat dibatalkan. Dokumen tetap
+ *   sebagai tombstone (lihat README "Kontrak R-DELETE") — jangan dihapus.
+ * - failed: worker gagal setelah pekerjaan destruktif mungkin dimulai; data
+ *   bisa sudah terhapus sebagian, jadi TETAP beku dan tidak dapat dibatalkan.
+ *   Permintaan ulang (requestId baru) melanjutkan sebagai requested.
+ * - cancelled: dibatalkan pengguna sebelum processing (sebelum ada data
+ *   yang dihapus); write normal dibuka kembali.
+ *
+ * Transisi sah: none|cancelled|failed → requested (permintaan);
+ * requested → cancelled (pengguna); requested → processing (worker B11);
+ * processing → completed|failed (worker); failed → requested (ulang).
  */
 export const States = Object.freeze({
   none: 'none',
@@ -27,9 +35,13 @@ export const States = Object.freeze({
   cancelled: 'cancelled',
 });
 
-/** Status yang membekukan write normal pengguna (dipakai C09/B11). */
+/**
+ * Status yang membekukan write normal pengguna pada users/{uid} dan
+ * subkoleksinya (ditegakkan rules C09). `failed` ikut beku: kegagalan
+ * setelah cleanup parsial tidak boleh membuka write lagi.
+ */
 export const FROZEN_STATES = Object.freeze([
-  States.requested, States.processing, States.completed,
+  States.requested, States.processing, States.completed, States.failed,
 ]);
 
 export class DeletionError extends Error {
