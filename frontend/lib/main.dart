@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
@@ -24,10 +25,13 @@ void main() async {
 
   await initializeDateFormatting('id_ID', null);
 
-  // A13: Izinkan GoogleFonts mengambil dari network hanya saat ada koneksi;
-  // jika cache kosong dan offline, Flutter akan memakai fallback sistem.
-  // Nilai default sudah true, tapi eksplisit agar niat ini terdokumentasi.
-  GoogleFonts.config.allowRuntimeFetching = true;
+  // Lato dibundel agar startup dan tampilan tidak bergantung pada unduhan font.
+  GoogleFonts.config.allowRuntimeFetching = false;
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'Lato',
+    ], await rootBundle.loadString('assets/fonts/OFL.txt'));
+  });
 
   // Status bar awal: ikon gelap untuk splash yang berlatar putih.
   SystemChrome.setSystemUIOverlayStyle(

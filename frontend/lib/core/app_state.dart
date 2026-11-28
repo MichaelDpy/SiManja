@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'finance_summary.dart';
 import 'mock_data.dart';
 import 'transaction_report.dart';
+import 'session_artifacts.dart';
 import '../models/transaction_history.dart';
 import '../models/user_profile.dart';
 import '../models/record_version.dart';
@@ -28,6 +29,7 @@ class AppState extends ChangeNotifier {
   static final AppState instance = AppState._();
 
   ProfileRepository? _profileRepository;
+  int _profileGeneration = 0;
   bool _allowLocalProfile;
   UserProfile? _loadedProfile;
   Future<void>? _profileLoad;
@@ -39,6 +41,17 @@ class AppState extends ChangeNotifier {
 
   bool get hasProfileRepository => _profileRepository != null;
   void useProfileRepository(ProfileRepository repository) {
+    if (identical(_profileRepository, repository) && !_allowLocalProfile) {
+      return;
+    }
+    _profileGeneration++;
+    _profileLoad = null;
+    _loadedProfile = null;
+    profileLoading = false;
+    profileSaving = false;
+    profileReady = false;
+    profileError = null;
+    profileWriteFailure = null;
     _profileRepository = repository;
     _allowLocalProfile = false;
   }
@@ -88,7 +101,10 @@ class AppState extends ChangeNotifier {
     token: _reportToken,
     uid: sessionUid,
     sessionRevision: _sessionRevision,
-    confirmed: _allowLocalTransactions || transactionsServerConfirmed,
+    confirmed:
+        !_dataAccessSuspended &&
+        profileReady &&
+        (_allowLocalTransactions || transactionsServerConfirmed),
     loading: transactionsLoading,
     pending: pendingMutations > 0 || transactionsHasPendingWrites,
     fromCache: transactionsFromCache,
@@ -96,7 +112,10 @@ class AppState extends ChangeNotifier {
   );
 
   void useTransactionRepository(TransactionRepository repository) {
-    if (identical(_transactionRepository, repository)) return;
+    if (identical(_transactionRepository, repository) &&
+        !_allowLocalTransactions) {
+      return;
+    }
     _transactionGeneration++;
     _transactionSubscription?.cancel();
     _transactionSubscription = null;
@@ -104,6 +123,15 @@ class AppState extends ChangeNotifier {
     _transactionRepository = repository;
     _allowLocalTransactions = false;
     _reportToken = Object();
+    _transactions = [];
+    _hasTransactionSnapshot = false;
+    transactionsLoading = false;
+    transactionsError = null;
+    transactionsFromCache = false;
+    transactionsHasPendingWrites = false;
+    _mutatingIds.clear();
+    pendingMutations = 0;
+    transactionWriteFailure = null;
   }
 
   void _startTransactionsIfNeeded() {
@@ -115,8 +143,37 @@ class AppState extends ChangeNotifier {
   String? sessionUid;
   int _sessionRevision = 0;
   int get sessionRevision => _sessionRevision;
+  bool _dataAccessSuspended = false;
+  bool get dataAccessSuspended => _dataAccessSuspended;
+  bool get hasInFlightDataWrites => pendingMutations > 0 || profileSaving;
+  SessionExportLease _exportLease = SessionExportStore.instance.newLease();
+  SessionExportLease get exportLease => _exportLease;
+  Future<bool> _lastLocalFileCleanup = Future.value(true);
+  Future<bool> get lastLocalFileCleanup => _lastLocalFileCleanup;
+
+  /// Data-only hook for B15 after a confirmed deleting lifecycle response.
+  /// Server-side authorization/freeze is owned by C09/B, not this RAM flag.
+  void suspendSessionData() {
+    final uid = sessionUid;
+    if (uid == null || _dataAccessSuspended) return;
+    _clearUserData();
+    sessionUid = uid;
+    _dataAccessSuspended = true;
+    profileError = 'Akses data dihentikan selama penghapusan akun diproses.';
+    notifyListeners();
+  }
+
+  /// Caller must first verify the account is active again on the server.
+  Future<void> resumeSessionData(String uid, String authEmail) {
+    if (!_dataAccessSuspended || sessionUid != uid) {
+      throw StateError('Sesi data tidak cocok.');
+    }
+    _dataAccessSuspended = false;
+    return beginSession(uid, authEmail);
+  }
 
   Future<void> beginSession(String uid, String authEmail) {
+    if (_dataAccessSuspended && sessionUid == uid) return Future.value();
     if (sessionUid != uid) {
       _clearUserData();
       sessionUid = uid;
@@ -130,7 +187,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> retryProfile() {
-    if (sessionUid == null) return Future.value();
+    if (sessionUid == null || _dataAccessSuspended) return Future.value();
     if (profileLoading) return _profileLoad ?? Future.value();
     final uid = sessionUid!;
     final revision = _sessionRevision;
@@ -139,7 +196,13 @@ class AppState extends ChangeNotifier {
     profileError = null;
     profileReady = false;
     notifyListeners();
-    final request = _loadProfile(repository, uid, email, revision);
+    final request = _loadProfile(
+      repository,
+      uid,
+      email,
+      revision,
+      _profileGeneration,
+    );
     _profileLoad = request;
     return request;
   }
@@ -149,7 +212,10 @@ class AppState extends ChangeNotifier {
     String uid,
     String authEmail,
     int revision,
+    int generation,
   ) async {
+    bool active() =>
+        revision == _sessionRevision && generation == _profileGeneration;
     try {
       if (repository == null && !_allowLocalProfile) {
         throw StateError('Repository profil belum siap.');
@@ -158,19 +224,19 @@ class AppState extends ChangeNotifier {
           ? _currentProfile()
           : await repository.loadOrCreate(uid, authEmail);
       profile.toMap();
-      if (revision != _sessionRevision) return;
+      if (!active()) return;
       _applyProfile(profile);
       _loadedProfile = profile;
       profileReady = true;
       _startTransactionsIfNeeded();
     } catch (error) {
-      if (revision == _sessionRevision) {
+      if (active()) {
         profileError = error is FormatException || error is ArgumentError
             ? 'Data profil tidak valid. Periksa data akun sebelum mencoba lagi.'
             : SyncFailure.from(error).loadMessage;
       }
     } finally {
-      if (revision == _sessionRevision) {
+      if (active()) {
         profileLoading = false;
         _profileLoad = null;
         notifyListeners();
@@ -221,6 +287,9 @@ class AppState extends ChangeNotifier {
     }
     final uid = sessionUid;
     final revision = _sessionRevision;
+    final generation = _profileGeneration;
+    bool active() =>
+        revision == _sessionRevision && generation == _profileGeneration;
     final base = previous ?? _loadedProfile ?? _currentProfile();
     profileSaving = true;
     profileWriteFailure = null;
@@ -229,17 +298,17 @@ class AppState extends ChangeNotifier {
       if (repository != null) {
         profile = await repository.save(uid!, profile, previous: base);
       }
-      if (revision != _sessionRevision) throw StateError('Sesi telah berubah.');
+      if (!active()) throw StateError('Sesi telah berubah.');
       _loadedProfile = profile;
       _applyProfile(profile);
     } on RecordConflict {
       rethrow;
     } catch (error) {
       final failure = SyncFailure.from(error);
-      if (revision == _sessionRevision) profileWriteFailure = failure;
+      if (active()) profileWriteFailure = failure;
       throw failure;
     } finally {
-      if (revision == _sessionRevision) {
+      if (active()) {
         profileSaving = false;
         notifyListeners();
       }
@@ -247,12 +316,17 @@ class AppState extends ChangeNotifier {
   }
 
   /// Logout tidak memuat fixture. Tema tetap preferensi perangkat pada tahap ini.
-  void clearSession() {
+  Future<bool> clearSession() {
     _clearUserData();
     notifyListeners();
+    return _lastLocalFileCleanup;
   }
 
   void _clearUserData() {
+    _lastLocalFileCleanup = _exportLease.retire();
+    _exportLease = SessionExportStore.instance.newLease();
+    _dataAccessSuspended = false;
+    _profileGeneration++;
     _reportToken = Object();
     _sessionRevision++;
     _transactionGeneration++;
@@ -433,20 +507,23 @@ class AppState extends ChangeNotifier {
       throw StateError('Transaksi ini masih diproses.');
     }
     final revision = _sessionRevision;
+    bool active() =>
+        revision == _sessionRevision &&
+        identical(repository, _transactionRepository);
     pendingMutations++;
     transactionWriteFailure = null;
     notifyListeners();
     try {
       await action(repository, uid);
-      if (revision != _sessionRevision) throw StateError('Sesi telah berubah.');
+      if (!active()) throw StateError('Sesi telah berubah.');
     } on RecordConflict {
       rethrow;
     } catch (error) {
       final failure = SyncFailure.from(error);
-      if (revision == _sessionRevision) transactionWriteFailure = failure;
+      if (active()) transactionWriteFailure = failure;
       throw failure;
     } finally {
-      if (revision == _sessionRevision) {
+      if (active()) {
         pendingMutations--;
         _mutatingIds.remove(id);
         notifyListeners();
@@ -455,6 +532,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> retryTransactions() async {
+    if (_dataAccessSuspended) return;
     if (_allowLocalTransactions) {
       transactionsLoading = false;
       transactionsError = null;
@@ -512,6 +590,7 @@ class AppState extends ChangeNotifier {
   }
 
   String generateId() {
+    if (_dataAccessSuspended) throw StateError('Akses data sesi dihentikan.');
     if (!_allowLocalTransactions) {
       if (sessionUid == null || _transactionRepository == null) {
         throw StateError('Sesi transaksi belum siap.');
@@ -566,6 +645,8 @@ class AppState extends ChangeNotifier {
 
   @override
   void dispose() {
+    unawaited(_exportLease.retire());
+    _profileGeneration++;
     _sessionRevision++;
     _transactionGeneration++;
     _transactionSubscription?.cancel();

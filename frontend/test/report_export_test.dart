@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:simanja/core/csv_exporter.dart';
+import 'package:simanja/core/session_artifacts.dart';
 
 import 'support/memory_history.dart';
 
@@ -18,6 +19,7 @@ void main() {
   late List<MethodCall> shares;
   setUp(() async {
     temp = await Directory.systemTemp.createTemp('simanja-c07-export-test-');
+    SessionExportStore.useForTesting(SessionExportStore());
     shares = [];
     messenger.setMockMethodCallHandler(paths, (_) async => temp.path);
     messenger.setMockMethodCallHandler(sharing, (call) async {
@@ -78,22 +80,28 @@ void main() {
       gate.complete(temp.path);
       expect((await request).isStale, isTrue);
       expect(shares, isEmpty);
-      expect(await temp.list().toList(), isEmpty);
+      expect(
+        await temp.list(recursive: true).where((item) => item is File).toList(),
+        isEmpty,
+      );
     },
   );
 
   test(
     'session change after file write is checked before invoking share',
     () async {
-      var checks = 0;
       final result = await CsvExporter.export(
         transactions: reportFixture(),
         periodLabel: 'Nov 2026',
-        isCurrent: () => ++checks < 3,
+        isCurrent: () =>
+            temp.listSync(recursive: true).whereType<File>().isEmpty,
       );
       expect(result.isStale, isTrue);
       expect(shares, isEmpty);
-      expect(await temp.list().toList(), isEmpty);
+      expect(
+        await temp.list(recursive: true).where((item) => item is File).toList(),
+        isEmpty,
+      );
     },
   );
 
