@@ -21,7 +21,8 @@ enum DeletionState {
     orElse: () => DeletionState.unknown,
   );
 
-  /// Permintaan masih dapat dibatalkan pengguna.
+  /// Kandidat pembatalan. Keputusan akhir tetap server: requested hasil retry
+  /// setelah failed tidak dapat dibatalkan karena cleanup mungkin sudah dimulai.
   bool get cancellable => this == requested;
 
   /// Proses sudah diterima server (belum tentu selesai).
@@ -86,7 +87,8 @@ abstract interface class AccountDeletionGateway {
   /// [SensitiveOperation.deleteAccount]; server juga memeriksa umur login.
   Future<DeletionStatus> request(ReauthGrant grant, {String? requestId});
 
-  /// Membatalkan selama status masih `requested`.
+  /// Membatalkan requested yang berasal dari none/cancelled. Retry setelah
+  /// failed ditolak server dengan `deletion-not-cancellable` walau requested.
   Future<DeletionStatus> cancel();
 }
 

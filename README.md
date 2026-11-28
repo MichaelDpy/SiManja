@@ -119,9 +119,9 @@ Layanan tepercaya berada di `backend/functions/`: Node 22, `firebase-functions` 
 | --- | --- |
 | `getAccountDeletionStatus` | Status milik pemanggil: `none` / `requested` / `processing` / `completed` / `failed` / `cancelled` |
 | `requestAccountDeletion({requestId})` | Wajib login dengan `auth_time` ≤ 5 menit dan akun Auth aktif. Membuat `requested` sekali saja; permintaan ulang mengembalikan status yang ada (idempoten, berbasis transaction). |
-| `cancelAccountDeletion()` | Hanya saat `requested`. Tanpa permintaan, status tidak berubah. `processing`/`completed` ditolak. |
+| `cancelAccountDeletion()` | Hanya `requested` dari `none`/`cancelled` (belum cleanup). Retry dari `failed` tidak dapat dibatalkan. Tanpa permintaan, status tidak berubah. |
 
-UID selalu diambil dari token Auth. Field `uid` di payload diabaikan. Status disimpan di `accountLifecycle/{uid}`, koleksi khusus Admin SDK: rules client default-deny sehingga aplikasi tidak bisa membaca atau mengubahnya. Kontrak lanjutan (pembekuan write C09, worker pembersihan B11, revokasi dan retensi B12, UI B13) memakai status `requested`/`processing`/`completed` sebagai sinyal beku. Client Dart ada di `frontend/lib/services/account_deletion_service.dart`.
+UID selalu diambil dari token Auth. Field `uid` di payload diabaikan. Status disimpan di `accountLifecycle/{uid}`, koleksi khusus Admin SDK: rules client default-deny sehingga aplikasi tidak bisa membaca atau mengubahnya. Kontrak lanjutan (pembekuan write C09, worker pembersihan B11, revokasi dan retensi B12, UI B13) memakai status `requested`/`processing`/`failed`/`completed` sebagai sinyal beku. Client Dart ada di `frontend/lib/services/account_deletion_service.dart`.
 
 Emulator Functions berjalan di port `5001` dan ikut menyala lewat `npm.cmd run emulators`. Script itu juga memasang dependensi `functions/` lebih dulu. Untuk perangkat fisik, port 5001 juga harus dapat dijangkau, sama seperti 9099 dan 8080.
 
@@ -132,17 +132,17 @@ Sumber kode: `backend/functions/src/deletion.js` (produsen), `frontend/lib/servi
 | Status | Arti | Write normal pengguna | Dapat dibatalkan |
 | --- | --- | --- | --- |
 | `none` (dokumen tidak ada) | Tidak ada permintaan | Dibuka | — |
-| `requested` | Diterima, menunggu worker (B11) | **Beku** | Ya |
+| `requested` | Diterima, menunggu worker (B11) | **Beku** | Hanya permintaan dari `none`/`cancelled`, bukan retry dari `failed` |
 | `processing` | Worker menghapus data | **Beku** | Tidak |
 | `failed` | Worker gagal; data mungkin sudah terhapus sebagian | **Beku** | Tidak (ulang dengan `requestId` baru → `requested`) |
 | `completed` | Selesai | **Beku** (tombstone) | Tidak |
 | `cancelled` | Dibatalkan sebelum ada data yang dihapus | Dibuka | — |
 
-- **Transisi sah:** `none|cancelled|failed → requested` (callable), `requested → cancelled` (callable), `requested → processing → completed|failed` (worker B11, Admin SDK, transaction + `version`).
+- **Transisi sah:** `none|cancelled|failed → requested` (callable), `requested → cancelled` hanya bila `previousState` adalah `none`/`cancelled` (belum cleanup). Retry dari `failed` tetap `requested` dan tidak dapat dibatalkan. Worker B11: `requested → processing → completed|failed` melalui Admin SDK, transaction + `version`. Pertahankan `previousState` saat retry idempoten; perubahan checkpoint tanpa transisi status tidak boleh menulis ulang asal transisi.
 - **Dokumen:** `accountLifecycle/{uid}`, berisi `state`, `requestId`, `requestedAtMs`, `updatedAtMs`, `version`, `previousState`, dan opsional `cancelledAtMs`. Tanpa email/PII. Hanya Admin SDK yang boleh membaca dan menulis; client tidak punya akses baca maupun tulis.
-- **Pembekuan untuk C09:** tolak create/update/delete pada `users/{uid}` dan `users/{uid}/transactions/{id}` bila dokumen `accountLifecycle/{uid}` ada dengan `state` ∈ {`requested`, `processing`, `failed`, `completed`}. `none` (dokumen tidak ada) dan `cancelled` membuka write. Uji replay token lama dan pending write setelah `completed` dimiliki B2-12 bersama C09.
-- **Otorisasi:** UID hanya dari token, `auth_time` ≤ 300 detik untuk permintaan, akun Auth aktif. `requestId` = kunci idempotensi (permintaan ulang tidak membuat job kedua). Error memakai `HttpsError` dengan `details.reason`: `unauthenticated`, `requires-recent-login`, `invalid-request-id`, `account-disabled`, `account-not-found`, `deletion-not-cancellable`.
-- **Status setelah Auth dihapus:** pemilik tidak bisa lagi memanggil callable (tidak ada token). Tidak ada pencarian status publik berbasis UID. Bukti minimum bagi pengguna adalah `requestId` yang ditampilkan saat permintaan diterima. Jalur pengecekan status setelah akun hilang (bila diperlukan) dirancang di B2-16 dengan verifikasi identitas, bukan membuka `accountLifecycle`.
+- **Pembekuan C09:** hanya dokumen lifecycle yang tidak ada atau `state: cancelled` yang mengizinkan write normal. `requested`/`processing`/`failed`/`completed`, state tak dikenal, atau field state tidak valid menolak write; `state: none` bukan pengganti menghilangkan dokumen. Akses baca milik pemilik tetap mengikuti UID, lifecycle sendiri tetap admin-only, dan delete parent profil tetap ditolak. Tes C09 membuktikan pending write dan replay token lama setelah Auth dihapus tidak membuat ulang data ketika tombstone `completed` dipertahankan; B2-12 melengkapi finalisasi/retensi worker nyata.
+- **Otorisasi:** UID hanya dari token, `auth_time` ≤ 300 detik untuk permintaan, akun Auth aktif. `requestId` = kunci idempotensi (permintaan ulang tidak membuat job kedua). Error memakai `HttpsError` dengan `details.reason`: `unauthenticated`, `requires-recent-login`, `invalid-request-id`, `account-disabled`, `account-not-found`, `deletion-not-cancellable`. Dokumen lifecycle dengan state tidak valid (termasuk `none` tersimpan) ditolak semua callable dengan `failed-precondition` / `invalid-lifecycle`; klien tidak boleh me-resetnya lewat request/cancel.
+- **Status setelah Auth dihapus:** sesi tidak dapat diperbarui seperti akun aktif; jangan mengasumsikan semua token lama langsung hilang. Status tetap memerlukan token pemilik yang diterima layanan, tanpa pencarian publik berbasis UID. Bukti minimum bagi pengguna adalah `requestId` saat permintaan diterima. Jalur status setelah sesi tidak dapat dipakai lagi (bila diperlukan) dirancang di B2-16 dengan verifikasi identitas, bukan membuka `accountLifecycle`. Tombstone tetap melindungi write dari token lama.
 - **Retensi tombstone:** dokumen `completed` dipertahankan sebagai pengaman anti-rekreasi. **Durasinya belum diputuskan (OPEN, pemilik data/C12)**, jadi B2-12 terblokir pada keputusan ini, bukan TTL tebakan.
 - **Region/target:** `us-central1` sementara sampai region R00 diputuskan; client dan server memakai konstanta yang sama. Hanya diuji di emulator; deploy membutuhkan Blaze dan target project.
 

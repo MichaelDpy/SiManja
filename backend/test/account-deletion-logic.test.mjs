@@ -92,3 +92,29 @@ test('kegagalan parsial tetap beku; hanya none/cancelled yang membuka write', ()
     { requestId: 'req_00000010', nowMs: now });
   assert.ok(FROZEN_STATES.includes(retry.write.state));
 });
+
+test('C09: retry setelah cleanup gagal tidak dapat dibatalkan untuk membuka write', () => {
+  const failed = { state: States.failed, previousState: States.processing, version: 4 };
+  const retry = planRequest(failed, { requestId: 'req_retry_0001', nowMs: now });
+  rejects(() => planCancel(retry.doc, { nowMs: now + 1 }),
+    'failed-precondition', 'deletion-not-cancellable');
+  const duplicate = planRequest(retry.doc, { requestId: 'req_retry_0002', nowMs: now + 2 });
+  rejects(() => planCancel(duplicate.doc, { nowMs: now + 3 }),
+    'failed-precondition', 'deletion-not-cancellable');
+});
+
+test('C09: requested dengan asal transisi tak dikenal gagal tertutup saat cancel', () => {
+  for (const previousState of [undefined, null, 'unknown', States.processing, States.completed, States.requested]) {
+    rejects(() => planCancel({ state: States.requested, previousState }, { nowMs: now }),
+      'failed-precondition', 'deletion-not-cancellable');
+  }
+});
+
+test('C09: lifecycle malformed tidak dapat di-reset lewat callable menjadi akun terbuka', () => {
+  for (const existing of [{}, { state: null }, { state: 'none' }, { state: 'future-state' }, { state: 1 }]) {
+    rejects(() => planRequest(existing, { requestId: 'req_invalid_01', nowMs: now }),
+      'failed-precondition', 'invalid-lifecycle');
+    rejects(() => planCancel(existing, { nowMs: now }), 'failed-precondition', 'invalid-lifecycle');
+    rejects(() => toStatus(existing), 'failed-precondition', 'invalid-lifecycle');
+  }
+});

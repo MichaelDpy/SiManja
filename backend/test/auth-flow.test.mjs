@@ -6,13 +6,15 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import {
   getAuth, connectAuthEmulator, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, signOut, sendPasswordResetEmail,
-  verifyPasswordResetCode, confirmPasswordReset,
+  verifyPasswordResetCode, confirmPasswordReset, deleteUser,
 } from 'firebase/auth';
 import {
   getFirestore, connectFirestoreEmulator, doc, collection, setDoc,
   deleteDoc, getDocFromServer, getDocsFromServer, serverTimestamp, onSnapshot, terminate,
+  disableNetwork, enableNetwork,
 } from 'firebase/firestore';
 import { emulatorAddress, projectId, profile, transaction, versionedUpdate as updateDoc } from './support/emulator.mjs';
+import { firestoreDocumentsUrl, setLifecycle, removeFixtureDocument } from './support/lifecycle-fixture.mjs';
 
 const clients = [];
 const password = 'Demo-test-Password123!';
@@ -166,4 +168,61 @@ test('Firestore: listener akun yang sama menerima tambah, edit dan hapus dari cl
   } finally {
     unsubscribe();
   }
+});
+
+test('C09: queued SDK write and saved Auth token cannot resurrect completed deletion', async () => {
+  const a = client();
+  const { user } = await createUserWithEmailAndPassword(a.auth, email(), password);
+  const token = await user.getIdToken(); // Never print or persist this fixture token.
+  const root = firestoreDocumentsUrl();
+  const name = `projects/${projectId}/databases/(default)/documents/users/${user.uid}`;
+  const profileFields = {
+    name: { stringValue: 'Replay fixture' }, phone: { stringValue: '' },
+    address: { stringValue: '' }, city: { stringValue: '' }, job: { stringValue: '' },
+    monthlyIncome: { integerValue: '0' }, darkMode: { booleanValue: true },
+    notifEnabled: { booleanValue: true }, revision: { integerValue: '1' },
+  };
+  const transactionFields = {
+    category: { stringValue: 'Gaji' }, description: { stringValue: 'Replay fixture' },
+    amount: { integerValue: '100' }, isIncome: { booleanValue: true },
+    date: { timestampValue: '2026-01-01T00:00:00Z' }, dateVersion: { integerValue: '2' },
+    revision: { integerValue: '1' },
+  };
+  const create = (documentName, fields) => ({
+    update: { name: documentName, fields },
+    updateTransforms: [
+      { fieldPath: 'createdAt', setToServerValue: 'REQUEST_TIME' },
+      { fieldPath: 'updatedAt', setToServerValue: 'REQUEST_TIME' },
+    ],
+  });
+  const replay = () => fetch(`${root}:commit`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ writes: [create(name, profileFields), create(`${name}/transactions/saved`, transactionFields)] }),
+    signal: AbortSignal.timeout(10000),
+  });
+  // Control: the exact token/payload works BEFORE the lifecycle tombstone.
+  assert.equal((await replay()).status, 200);
+  await disableNetwork(a.db);
+  const queued = setDoc(doc(a.db, `users/${user.uid}/transactions/queued`), transaction());
+  // Attach the rejection handler before reconnect, avoiding an unhandled error.
+  const deniedQueued = denied(queued);
+  try {
+    await setLifecycle(user.uid, 'completed', 'processing');
+    await removeFixtureDocument(`users/${user.uid}/transactions/saved`);
+    await removeFixtureDocument(`users/${user.uid}`);
+  } finally {
+    await enableNetwork(a.db);
+  }
+  await deniedQueued;
+  await deleteUser(user);
+  assert.equal(a.auth.currentUser, null);
+  // Same saved JWT still passes owner READ rules in this emulator. A 404, rather
+  // than 401/403, is the control proving write rejection is not just Auth logout.
+  const read = await fetch(`${root}/users/${user.uid}`, {
+    headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(5000),
+  });
+  assert.equal(read.status, 404);
+  const blocked = await replay();
+  assert.equal(blocked.status, 403);
+  assert.equal((await blocked.json()).error.status, 'PERMISSION_DENIED');
 });

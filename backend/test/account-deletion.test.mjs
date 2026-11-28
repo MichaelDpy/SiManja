@@ -11,7 +11,8 @@ import {
   getFirestore, connectFirestoreEmulator, doc, getDoc, setDoc, terminate,
 } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
-import { emulatorAddress, projectId } from './support/emulator.mjs';
+import { emulatorAddress, projectId, profile, transaction } from './support/emulator.mjs';
+import { setLifecycle } from './support/lifecycle-fixture.mjs';
 
 const REGION = 'us-central1';
 const password = 'Demo-test-Password123!';
@@ -147,4 +148,42 @@ test('B10: akun Auth yang dinonaktifkan tidak dapat meminta penghapusan', async 
   );
   assert.equal(response.status, 200);
   await fails(a.call('requestAccountDeletion', { requestId: rid() }), 'permission-denied', 'account-disabled');
+});
+
+test('C09: callable requested freezes writes; safe cancellation restores versioned data access', async () => {
+  const a = await signedIn();
+  await setDoc(doc(a.db, 'users', a.uid), profile());
+  await a.call('requestAccountDeletion', { requestId: rid() });
+  const ref = doc(a.db, 'users', a.uid, 'transactions', 'after-request');
+  await assert.rejects(setDoc(ref, transaction()), { code: 'permission-denied' });
+  assert.equal((await a.call('getAccountDeletionStatus', {})).state, 'requested');
+  assert.equal((await a.call('cancelAccountDeletion', {})).state, 'cancelled');
+  await setDoc(ref, transaction());
+  assert.equal((await getDoc(ref)).exists(), true);
+});
+
+test('C09: retry after partial failure cannot cancel back into an unfrozen account', async () => {
+  const a = await signedIn();
+  // Simulates Admin worker output, not implementation of the future worker.
+  await setLifecycle(a.uid, 'failed', 'processing');
+  const retry = await a.call('requestAccountDeletion', { requestId: rid() });
+  assert.equal(retry.state, 'requested');
+  await fails(a.call('cancelAccountDeletion', {}), 'failed-precondition', 'deletion-not-cancellable');
+  assert.equal((await a.call('getAccountDeletionStatus', {})).state, 'requested');
+  await assert.rejects(setDoc(doc(a.db, 'users', a.uid), profile()), { code: 'permission-denied' });
+  await setLifecycle(a.uid, 'completed', 'processing');
+  const completed = await a.call('requestAccountDeletion', { requestId: rid() });
+  assert.equal(completed.state, 'completed');
+  assert.equal(completed.created, false);
+  await fails(a.call('cancelAccountDeletion', {}), 'failed-precondition', 'deletion-not-cancellable');
+});
+
+test('C09: malformed lifecycle cannot be reopened by request then cancel', async () => {
+  const a = await signedIn();
+  await setLifecycle(a.uid, 'none'); // Stored none is NOT the absence of a doc.
+  for (const [name, data] of [['getAccountDeletionStatus', {}],
+    ['requestAccountDeletion', { requestId: rid() }], ['cancelAccountDeletion', {}]]) {
+    await fails(a.call(name, data), 'failed-precondition', 'invalid-lifecycle');
+  }
+  await assert.rejects(setDoc(doc(a.db, 'users', a.uid), profile()), { code: 'permission-denied' });
 });

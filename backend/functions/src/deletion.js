@@ -12,7 +12,8 @@ export const RECENT_AUTH_MAX_AGE_SECONDS = 5 * 60;
 /**
  * Status siklus penghapusan.
  * - none: tidak ada permintaan aktif (dokumen tidak ada).
- * - requested: diterima, menunggu worker (B11); masih dapat dibatalkan.
+ * - requested: diterima, menunggu worker (B11); hanya permintaan dari
+ *   none/cancelled yang dapat dibatalkan. Retry dari failed tetap beku.
  * - processing: worker berjalan; tidak dapat dibatalkan; write dibekukan (C09).
  * - completed: selesai (B11/B12); tidak dapat dibatalkan. Dokumen tetap
  *   sebagai tombstone (lihat README "Kontrak R-DELETE") — jangan dihapus.
@@ -23,7 +24,8 @@ export const RECENT_AUTH_MAX_AGE_SECONDS = 5 * 60;
  *   yang dihapus); write normal dibuka kembali.
  *
  * Transisi sah: none|cancelled|failed → requested (permintaan);
- * requested → cancelled (pengguna); requested → processing (worker B11);
+ * requested dari none/cancelled → cancelled (pengguna);
+ * requested → processing (worker B11);
  * processing → completed|failed (worker); failed → requested (ulang).
  */
 export const States = Object.freeze({
@@ -57,6 +59,16 @@ export class DeletionError extends Error {
 }
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
+// `none` means absence, never a stored state. Admin endpoints bypass rules, so
+// they must also refuse to reopen malformed/unknown lifecycle documents.
+function storedState(existing) {
+  if (existing == null) return States.none;
+  if (existing.state === States.none || !Object.values(States).includes(existing.state)) {
+    throw new DeletionError('failed-precondition', 'invalid-lifecycle');
+  }
+  return existing.state;
+}
 
 /**
  * Ambil identitas pemanggil dari token terverifikasi. UID di payload tidak
@@ -96,7 +108,7 @@ export function validateRequestId(requestId) {
  * proses aktif/selesai tidak membuat proses kedua; status yang ada dikembalikan.
  */
 export function planRequest(existing, { requestId, nowMs }) {
-  const state = existing?.state ?? States.none;
+  const state = storedState(existing);
   if ([States.requested, States.processing, States.completed].includes(state)) {
     return { write: null, doc: existing };
   }
@@ -112,13 +124,14 @@ export function planRequest(existing, { requestId, nowMs }) {
   return { write: doc, doc };
 }
 
-/** Rencana pembatalan: hanya saat requested; none/cancelled → tanpa perubahan. */
+/** Batal hanya requested dari none/cancelled: belum ada cleanup destruktif. */
 export function planCancel(existing, { nowMs }) {
-  const state = existing?.state ?? States.none;
+  const state = storedState(existing);
   if (state === States.none || state === States.cancelled) {
     return { write: null, doc: existing ?? null };
   }
-  if (state !== States.requested) {
+  if (state !== States.requested
+    || ![States.none, States.cancelled].includes(existing.previousState)) {
     throw new DeletionError('failed-precondition', 'deletion-not-cancellable');
   }
   const doc = {
@@ -134,9 +147,10 @@ export function planCancel(existing, { nowMs }) {
 
 /** Bentuk respons untuk client; tidak membocorkan field internal lain. */
 export function toStatus(doc) {
-  if (!doc) return { state: States.none };
+  const state = storedState(doc);
+  if (state === States.none) return { state: States.none };
   return {
-    state: doc.state,
+    state,
     requestId: doc.requestId ?? null,
     requestedAtMs: doc.requestedAtMs ?? null,
     updatedAtMs: doc.updatedAtMs ?? null,

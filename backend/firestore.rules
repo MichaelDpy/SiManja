@@ -2,6 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function owns(uid) { return request.auth != null && request.auth.uid == uid; }
+    function permitsUserWrites(uid) {
+      let lifecycle = /databases/$(database)/documents/accountLifecycle/$(uid);
+      // Only absence or an Admin-confirmed safe cancellation permits writes.
+      // Unknown/malformed future states fail closed. Keep completed tombstones
+      // after deleting Auth/profile: a still-valid old token must not recreate.
+      return !exists(lifecycle)
+        || get(lifecycle).data.get('state', '') == 'cancelled';
+    }
     function validRevision(data) {
       return !('revision' in data) || (data.revision is int && data.revision >= 1 && data.revision <= 9007199254740991);
     }
@@ -51,23 +59,27 @@ service cloud.firestore {
     }
     match /users/{uid} {
       allow get: if owns(uid);
-      allow create: if owns(uid) && validProfile(request.resource.data)
+      allow create: if owns(uid) && permitsUserWrites(uid) && validProfile(request.resource.data)
         && request.resource.data.get('revision', 1) == 1
         && request.resource.data.createdAt == request.time;
-      allow update: if owns(uid) && validProfile(request.resource.data)
+      allow update: if owns(uid) && permitsUserWrites(uid) && validProfile(request.resource.data)
         && nextRevision()
         && request.resource.data.createdAt == resource.data.createdAt;
       match /transactions/{id} {
-        allow read, delete: if owns(uid);
-        allow create: if owns(uid) && validTransaction(request.resource.data)
+        allow read: if owns(uid);
+        allow delete: if owns(uid) && permitsUserWrites(uid);
+        allow create: if owns(uid) && permitsUserWrites(uid) && validTransaction(request.resource.data)
           && request.resource.data.get('revision', 1) == 1
           && request.resource.data.createdAt == request.time;
-        allow update: if owns(uid) && validTransaction(request.resource.data)
+        allow update: if owns(uid) && permitsUserWrites(uid) && validTransaction(request.resource.data)
           && nextRevision()
           && (!('dateVersion' in resource.data) || request.resource.data.get('dateVersion', 0) == 2)
           && request.resource.data.createdAt == resource.data.createdAt;
       }
     }
+    // Admin SDK bypasses rules. No client claim, batch or status UI may mutate
+    // or inspect this collection; status is exposed through the owned callable.
+    match /accountLifecycle/{uid} { allow read, write: if false; }
     match /{document=**} { allow read, write: if false; }
   }
 }
