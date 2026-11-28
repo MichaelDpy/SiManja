@@ -99,12 +99,12 @@ class _DataTablePageState extends State<DataTablePage> {
 
   void _onStateChanged() {
     if (mounted) {
-      // A05: jaga invariant — jika bulan terpilih tidak ada lagi di data,
-      // reset ke "Semua" agar DropdownButton tidak menerima value tak dikenal.
-      final opts = _buildPeriodOptions();
-      if (!opts.contains(_period)) {
-        _period = const _PeriodFilter();
-      }
+      // A05: jangan reset _period secara otomatis saat bulan hilang dari data.
+      // Jika bulan yang dipilih tidak lagi ada di opsi, defensive guard di
+      // _PeriodDropdown (selected: periodOptions.contains(_period) ? _period
+      // : const _PeriodFilter()) menampilkan "Semua" secara visual, sementara
+      // _configureReport() menghasilkan baris kosong → empty state tampil.
+      // Reset hanya terjadi lewat tindakan pengguna eksplisit (_resetFilters).
       _configureReport();
       setState(() {});
     }
@@ -215,8 +215,21 @@ class _DataTablePageState extends State<DataTablePage> {
       }
 
       if (result.isSuccess) {
-        // Share sheet sudah terbuka — tidak klaim "berhasil tersimpan"
-        // karena file baru tersimpan setelah pengguna memilih tujuan.
+        // Share sheet sudah terbuka dan pengguna memilih tujuan.
+        // Tidak klaim "berhasil tersimpan" — file baru tersimpan setelah
+        // pengguna memilih tujuan di sisi OS/aplikasi penerima.
+      } else if (result.isUnavailable) {
+        // A1-08: Platform meluncurkan share sheet tetapi tidak melaporkan
+        // apakah pengguna memilih tujuan (misalnya iOS/Web). File sudah
+        // diserahkan ke OS — tidak dapat dicabut dan tidak terkonfirmasi diterima.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Berkas dibagikan. Konfirmasi penerimaan bergantung pada aplikasi tujuan.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       } else if (result.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -239,7 +252,8 @@ class _DataTablePageState extends State<DataTablePage> {
           ),
         );
       }
-      // isCancelled: pengguna menutup share sheet — tidak perlu feedback
+      // isCancelled/isStale: pengguna menutup share sheet atau sesi berubah
+      // — tidak perlu feedback tambahan
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -478,38 +492,48 @@ class _DataTablePageState extends State<DataTablePage> {
               ),
               if (hasActiveFilter) ...[
                 const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _resetFilters,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.teal.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: AppColors.teal.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.filter_alt_off,
-                          color: AppColors.teal,
-                          size: 11,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Reset filter',
-                          style: GoogleFonts.lato(
-                            color: AppColors.teal,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                // A1-13: SizedBox 48 untuk memenuhi target sentuh minimum
+                SizedBox(
+                  height: 48,
+                  child: Center(
+                    child: Semantics(
+                      button: true,
+                      label: 'Reset filter',
+                      child: GestureDetector(
+                        onTap: _resetFilters,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.teal.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.teal.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.filter_alt_off,
+                                color: AppColors.teal,
+                                size: 11,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Reset filter',
+                                style: GoogleFonts.lato(
+                                  color: AppColors.teal,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -672,16 +696,20 @@ class _DataTablePageState extends State<DataTablePage> {
                               ),
                             ),
                             // Jumlah
-                            SizedBox(
-                              width: 140,
-                              child: Text(
-                                '$sign${_currencyFmt.rupiah(signed.abs())}',
-                                style: GoogleFonts.lato(
-                                  color: amtColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                            Tooltip(
+                              message:
+                                  '$sign${_currencyFmt.rupiah(signed.abs())}',
+                              child: SizedBox(
+                                width: 140,
+                                child: Text(
+                                  '$sign${_currencyFmt.rupiah(signed.abs())}',
+                                  style: GoogleFonts.lato(
+                                    color: amtColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                             // Tanggal
@@ -844,31 +872,38 @@ class _HeaderCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = sortCol == col;
-    return GestureDetector(
-      onTap: () => onTap(col),
-      child: SizedBox(
-        width: width,
-        child: Row(
-          children: [
-            Flexible(
-              child: Text(
-                label,
-                style: GoogleFonts.lato(
-                  color: isActive ? AppColors.teal : AppColors.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+    final sortLabel = isActive
+        ? (asc ? 'diurutkan naik' : 'diurutkan turun')
+        : 'tidak diurutkan';
+    return Semantics(
+      button: true,
+      label: 'Urutkan berdasarkan $label, saat ini $sortLabel',
+      child: GestureDetector(
+        onTap: () => onTap(col),
+        child: SizedBox(
+          width: width,
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  style: GoogleFonts.lato(
+                    color: isActive ? AppColors.teal : AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-            if (isActive) ...[
-              const SizedBox(width: 2),
-              Icon(
-                asc ? Icons.arrow_upward : Icons.arrow_downward,
-                size: 10,
-                color: AppColors.teal,
-              ),
+              if (isActive) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  asc ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 10,
+                  color: AppColors.teal,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -955,14 +990,17 @@ class _SummaryPill extends StatelessWidget {
               label,
               style: GoogleFonts.lato(color: AppColors.textMuted, fontSize: 10),
             ),
-            Text(
-              value,
-              style: GoogleFonts.lato(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: GoogleFonts.lato(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

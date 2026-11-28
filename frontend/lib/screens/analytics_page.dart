@@ -130,15 +130,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   void _nextPeriod() {
     final now = DateTime.now();
     final next = DateTime(_referenceMonth.year, _referenceMonth.month + 1);
-    // Tidak boleh melebihi bulan sekarang
-    if (!next.isAfter(DateTime(now.year, now.month))) {
+    // Batas maju: selaras dengan lastDate picker kalender (31 Des tahun+1).
+    // Transaksi masa depan yang sah (A1-04) harus bisa dituju di analitik.
+    if (!next.isAfter(DateTime(now.year + 1, 12))) {
       setState(() => _referenceMonth = next);
     }
   }
 
   bool get _canGoNext {
     final now = DateTime.now();
-    return _referenceMonth.isBefore(DateTime(now.year, now.month));
+    return _referenceMonth.isBefore(DateTime(now.year + 1, 12));
   }
 
   String get _rangeLabel {
@@ -780,8 +781,9 @@ class _PeriodStepper extends StatelessWidget {
           icon: const Icon(Icons.chevron_left, size: 20),
           onPressed: onPrev,
           tooltip: 'Periode sebelumnya',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          // A1-13: kembalikan ke default 48×48, hapus override 32×32
+          padding: const EdgeInsets.all(8),
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -806,8 +808,9 @@ class _PeriodStepper extends StatelessWidget {
           ),
           onPressed: onNext,
           tooltip: 'Periode berikutnya',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          // A1-13: kembalikan ke default 48×48, hapus override 32×32
+          padding: const EdgeInsets.all(8),
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         ),
         const SizedBox(width: 4),
       ],
@@ -864,14 +867,17 @@ class _MetricCard extends StatelessWidget {
                     fontSize: 10,
                   ),
                 ),
-                Text(
-                  value,
-                  style: GoogleFonts.lato(
-                    color: cs.onSurface,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: GoogleFonts.lato(
+                      color: cs.onSurface,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
                 if (subtitle != null)
                   Text(

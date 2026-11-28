@@ -11,6 +11,7 @@ import '../models/user_profile.dart';
 import '../models/record_version.dart';
 import '../models/sync_failure.dart';
 import '../services/auth_service.dart';
+import '../widgets/local_avatar.dart';
 import '../widgets/session_scope.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -19,6 +20,17 @@ class ProfilePage extends StatefulWidget {
   @override
   State<ProfilePage> createState() => _ProfilePageState();
 }
+
+/// Keadaan editor profil untuk jalur keluar (A1-10).
+///
+/// - [clean]: tidak ada perubahan terhadap baseline → keluar tanpa discard.
+/// - [dirty]: ada perubahan belum disimpan → keputusan discard eksplisit.
+/// - [saving]: sedang menyimpan → state sementara, di-reset di `finally`
+///   (ada jalur keluar; tidak menjebak); preferensi & form tidak ditumpuk.
+///
+/// CATATAN: ini BUKAN penjebak navigasi. Tidak ada `PopScope`; pindah tab
+/// sendiri tetap dipertahankan via `IndexedStack` di `MainShell`.
+enum ProfileFormState { clean, dirty, saving }
 
 class _ProfilePageState extends State<ProfilePage> {
   final _formKey = GlobalKey<FormState>();
@@ -34,7 +46,23 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _isSaving = false;
   bool _isLoggingOut = false;
   String? _saveError;
+
+  /// Baseline = profil terakhir yang terkonfirmasi/tersimpan (atau snapshot
+  /// awal). Dirty dihitung terhadap baseline ini; diperbarui pada success.
   late UserProfile _editBase;
+
+  // A1-10: dirty tracking.
+  bool _isDirty = false;
+
+  /// Field form yang dapat diedit (email identitas read-only, tidak dirty).
+  List<TextEditingController> get _dirtyControllers => [
+    _namaCtrl,
+    _waCtrl,
+    _alamatCtrl,
+    _kotaCtrl,
+    _pekerjaanCtrl,
+    _pendapatanCtrl,
+  ];
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -50,15 +78,22 @@ class _ProfilePageState extends State<ProfilePage> {
     _kotaCtrl = TextEditingController(text: s.city);
     _pekerjaanCtrl = TextEditingController(text: s.job);
     // Tampilkan angka bulat tanpa separator saat edit
+    // A1-03: pendapatan nol dipertahankan ('0', bukan dikosongkan); kosong→0.
     _pendapatanCtrl = TextEditingController(
-      text: s.monthlyIncome > 0 ? s.monthlyIncome.toInt().toString() : '',
+      text: s.monthlyIncome.toInt().toString(),
     );
+    for (final c in _dirtyControllers) {
+      c.addListener(_onFieldChanged);
+    }
     AppState.instance.addListener(_onStateChanged);
   }
 
   @override
   void dispose() {
     AppState.instance.removeListener(_onStateChanged);
+    for (final c in _dirtyControllers) {
+      c.removeListener(_onFieldChanged);
+    }
     _namaCtrl.dispose();
     _emailCtrl.dispose();
     _waCtrl.dispose();
@@ -71,6 +106,44 @@ class _ProfilePageState extends State<ProfilePage> {
 
   void _onStateChanged() {
     if (mounted) setState(() {});
+  }
+
+  // ── Dirty state (A1-10) ───────────────────────────────────────────────
+
+  void _onFieldChanged() => _updateDirty();
+
+  void _updateDirty() {
+    final dirty = _checkDirty();
+    if (dirty != _isDirty && mounted) setState(() => _isDirty = dirty);
+  }
+
+  /// Periksa apakah form berbeda dari baseline (`_editBase`).
+  /// Perbandingan SEMANTIK, bukan teks mentah: trim nama/telepon/alamat/kota/
+  /// pekerjaan; pendapatan dibanding nilai rupiah bulat (`parseIncome`,
+  /// kosong→0; invalid→dirty). Email read-only tidak ikut.
+  bool _checkDirty() {
+    final b = _editBase;
+    if (_namaCtrl.text.trim() != b.name.trim()) return true;
+    if (_waCtrl.text.trim() != b.phone.trim()) return true;
+    if (_alamatCtrl.text.trim() != b.address.trim()) return true;
+    if (_kotaCtrl.text.trim() != b.city.trim()) return true;
+    if (_pekerjaanCtrl.text.trim() != b.job.trim()) return true;
+    final raw = _pendapatanCtrl.text.trim();
+    final parsed = raw.isEmpty ? 0.0 : UserProfile.parseIncome(raw);
+    if (parsed == null) return true; // invalid pendapatan → draft berbeda
+    return parsed != b.monthlyIncome;
+  }
+
+  /// Keadaan form untuk jalur keluar (A1-10).
+  ///
+  /// `dirty` didahulukan agar keputusan discard tidak hilang karena ada juga
+  /// `saving`; `saving` di-reset di `finally` (`_isSaving`) → jalur keluar.
+  ProfileFormState get _formState {
+    if (_isDirty) return ProfileFormState.dirty;
+    if (_isSaving || AppState.instance.profileSaving) {
+      return ProfileFormState.saving;
+    }
+    return ProfileFormState.clean;
   }
 
   // ── Foto ──────────────────────────────────────────────────────────────
@@ -166,7 +239,8 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_pendapatanCtrl.text.trim().isNotEmpty && income == null) {
       setState(
         () => _saveError =
-            'Pendapatan harus berupa angka bulat rupiah yang valid',
+            // A1-03: pesan selaras validator field & kontrak domain.
+            'Pendapatan harus berupa angka bulat non-negatif',
       );
       return;
     }
@@ -180,9 +254,19 @@ class _ProfilePageState extends State<ProfilePage> {
       job: _pekerjaanCtrl.text.trim(),
       monthlyIncome: income ?? _editBase.monthlyIncome,
     );
+
+    // A1-10 + C08: snapshot sesi untuk menolak draft/feedback sesi lama
+    // (UID switch). SessionController/AppState tetap owner sesi.
+    final appState = AppState.instance;
+    final revision = appState.sessionRevision;
+    final sessionUid = appState.sessionUid;
+    bool sessionActive() =>
+        appState.sessionRevision == revision &&
+        appState.sessionUid == sessionUid;
+
     try {
       // Tunggu konfirmasi write melalui AppState sebelum menampilkan sukses.
-      await AppState.instance.updateProfile(
+      await appState.updateProfile(
         newName: submitted.name,
         newEmail: _emailCtrl.text.trim(),
         newPhone: submitted.phone,
@@ -192,14 +276,22 @@ class _ProfilePageState extends State<ProfilePage> {
         newIncome: submitted.monthlyIncome,
         previous: _editBase,
       );
-      // Keep the baseline aligned with the form, including untouched fields
-      // that may have merged with a different server value while saving.
+
+      // A1-10: tidak memindahkan draft/feedback ke sesi lain; tidak ada
+      // baseline update & tidak ada feedback bila sesi berubah / widget hilang.
+      if (!mounted) return;
+      if (!sessionActive()) return;
+
+      // Success memperbarui baseline TANPA dialog dirty palsu.
+      // `version` server dipertahankan; untouched field yang di-merge server
+      // tetap ditangani AppState (profilePatch); baseline disamakan dengan isi
+      // form yang tersimpan.
       _editBase = UserProfile.fromMap(
         submitted.toMap(),
-        version: AppState.instance.profileSnapshot.version,
+        version: appState.profileSnapshot.version,
       );
+      setState(() => _isDirty = false);
 
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -220,13 +312,17 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(
-        () => _saveError = e is RecordConflict || e is SyncFailure
-            ? e.toString()
-            : e is ArgumentError
-            ? e.message.toString()
-            : 'Profil belum dapat disimpan. Periksa koneksi dan coba lagi.',
-      );
+      // Gagal/konflik mempertahankan input; baseline TIDAK diperbarui.
+      // Tidak ada feedback sesi lama (UID switch / sesi berubah).
+      if (sessionActive()) {
+        setState(
+          () => _saveError = e is RecordConflict || e is SyncFailure
+              ? e.toString()
+              : e is ArgumentError
+              ? e.message.toString()
+              : 'Profil belum dapat disimpan. Periksa koneksi dan coba lagi.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -254,14 +350,27 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_isLoggingOut) return;
     setState(() => _isLoggingOut = true);
     try {
+      // A1-10: ini jalur LOGOUT PENGGUNA (user-initiated). Keputusan discard
+      // draft profil yang belum disimpan harus eksplisit. Batal→tidak keluar
+      // & input dipertahankan; Keluar→discard disetujui→keluar.
+      //
+      // BUKAN penjebak navigasi; pindah tab sendiri tidak memanggil ini.
+      //
+      // LOGOUT KARENA SESI SERVER INVALID TIDAK DITAHAN DRAFT: jalur itu
+      // tidak melalui `_logout`; `SessionController._failed`/`_receive(null)`
+      // → `AppState.clearSession()` + `SessionGate` membersihkan stack.
+      // (Owner sesi tetap B/C; tidak ada perubahan shared action; lease.)
+      final hasUnsavedDraft = _formState == ProfileFormState.dirty;
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Keluar dari Akun?'),
-          content: const Text(
-            'Profil yang sudah tersimpan tetap ada pada akun. Perubahan yang masih diproses belum terjamin tersimpan. Tampilan sesi dan tautan foto akan dikosongkan. Salinan yang sudah dibagikan tidak dapat ditarik kembali.',
+          content: Text(
+            'Profil yang sudah tersimpan tetap ada pada akun. Perubahan yang masih diproses belum terjamin tersimpan. Tampilan sesi dan tautan foto akan dikosongkan. Salinan yang sudah dibagikan tidak dapat ditarik kembali.'
+            '${hasUnsavedDraft ? ' Perubahan profil yang belum disimpan akan dibuang.' : ''}',
           ),
           actions: [
+            // Cancel discard/logout: tidak ada perubahan; draft dipertahankan.
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Batal'),
@@ -462,6 +571,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 label: 'Pendapatan Bulanan (Rp)',
                 icon: Icons.payments_outlined,
                 keyboardType: TextInputType.number,
+                // A1-13: Done karena field terakhir sebelum preferensi toggle
+                textInputAction: TextInputAction.done,
                 hint: 'Contoh: 5000000',
                 helperText:
                     'Rupiah bulat: 5000000 atau 5.000.000. Kosong berarti 0.',
@@ -622,34 +733,19 @@ class _AvatarWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final photoPath = state.photoPath;
-    final hasPhoto = photoPath != null && photoPath.isNotEmpty;
-
-    ImageProvider? imageProvider;
-    if (hasPhoto) {
-      final file = File(photoPath);
-      // Cek file secara sync hanya untuk ImageProvider; file tidak ada = fallback
-      try {
-        if (file.existsSync()) {
-          imageProvider = FileImage(file);
-        }
-      } catch (_) {
-        // Gagal baca file → fallback ke avatar default
-      }
-    }
-
+    // A1-11: fallback tahan file hilang/korup/race (exists saja tidak cukup;
+    // CircleAvatar tidak punya errorBuilder) via SafeLocalAvatar.
     return GestureDetector(
       onTap: onTap,
       child: Stack(
         children: [
-          CircleAvatar(
+          SafeLocalAvatar(
+            imagePath: state.photoPath,
             radius: 52,
             backgroundColor: AppColors.teal.withValues(alpha: 0.15),
-            backgroundImage: imageProvider,
-            // Fallback: ikon person jika tidak ada foto atau foto gagal dimuat
-            child: imageProvider == null
-                ? const Icon(Icons.person, color: AppColors.teal, size: 52)
-                : null,
+            fallbackIcon: Icons.person,
+            fallbackIconColor: AppColors.teal,
+            fallbackIconSize: 52,
           ),
           Positioned(
             bottom: 0,
@@ -827,6 +923,7 @@ class _AppFormField extends StatelessWidget {
   final bool readOnly;
   final String? Function(String?)? validator;
   final TextCapitalization textCapitalization;
+  final TextInputAction? textInputAction;
 
   const _AppFormField({
     super.key,
@@ -840,6 +937,7 @@ class _AppFormField extends StatelessWidget {
     this.readOnly = false,
     this.validator,
     this.textCapitalization = TextCapitalization.none,
+    this.textInputAction,
   });
 
   @override
@@ -851,6 +949,8 @@ class _AppFormField extends StatelessWidget {
       keyboardType: keyboardType,
       maxLines: maxLines,
       textCapitalization: textCapitalization,
+      // A1-13: textInputAction untuk focus traversal yang logis
+      textInputAction: textInputAction ?? TextInputAction.next,
       validator: validator,
       style: GoogleFonts.lato(fontSize: 14),
       decoration: InputDecoration(

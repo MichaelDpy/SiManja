@@ -13,9 +13,24 @@ import '../models/transaction_model.dart';
 ///   tanggal_iso, kategori, keterangan, jenis, nominal_rupiah
 ///
 /// Aturan keamanan:
-/// - Semua field teks di-quote dan koma/kutip/newline di-escape.
-/// - Field yang diawali =, +, -, @ diawali dengan spasi (CSV injection guard).
+/// - Semua field teks di-quote dan koma/kutip di-escape (kutip ganda `""`).
+/// - Field yang diawali karakter formula (=, +, -, @, |, %) diawali spasi
+///   (CSV injection guard).
 /// - Encoding UTF-8 dengan BOM agar Excel membuka dengan benar.
+///   Encoding ditulis dengan `utf8.encode`, BUKAN `codeUnits` (UTF-16).
+///
+/// Normalisasi newline (A1-07, tanpa mengubah domain):
+/// - Separator record output selalu `\n` (LF), satu `\n` di akhir tiap baris,
+///   tidak ada baris kosong tambahan; output diakhiri satu `\n`.
+/// - Newline di DALAM nilai field (`\n`, `\r\n`, `\r`) dinormalisasi menjadi
+///   satu spasi, sehingga teks tidak pernah menyisipkan record tambahan.
+/// - Newline pada baris komentar metadata (#...) juga dinormalisasi ke spasi.
+/// - Parser independen [parseCsv] menerima separator `\n`, `\r\n`, `\r`,
+///   dan menormalisasi newline di dalam field kutipan menjadi `\n`.
+///
+/// Decode: [decodeStrict] melakukan UTF-8 decode KETAT
+/// (`allowMalformed: false`), melempar [FormatException] untuk byte malformed
+/// atau sequence terpotong, serta melepas satu BOM UTF-8 di awal.
 ///
 /// [CsvExportResult] membedakan berhasil, dibatalkan pengguna, dan gagal.
 abstract final class CsvExporter {
@@ -58,10 +73,17 @@ abstract final class CsvExporter {
       ], subject: 'Data Transaksi SIMANJA — $periodLabel');
       if (!current()) return const CsvExportResult.stale();
 
-      if (result.status == ShareResultStatus.dismissed) {
-        return const CsvExportResult.cancelled();
-      }
-      return const CsvExportResult.success();
+      // A1-08: Bedakan tiga nilai ShareResultStatus secara eksplisit.
+      // - success: pengguna memilih tujuan — share sheet ditutup dengan aksi.
+      // - dismissed: pengguna menutup share sheet tanpa memilih — bukan sukses.
+      // - unavailable: platform meluncurkan share tapi aksi pengguna tidak bisa
+      //   dikonfirmasi (misalnya iOS/Web yang tidak melaporkan hasil). Ini bukan
+      //   kegagalan teknis dan BUKAN konfirmasi penerimaan — gunakan unavailable.
+      return switch (result.status) {
+        ShareResultStatus.success => const CsvExportResult.success(),
+        ShareResultStatus.dismissed => const CsvExportResult.cancelled(),
+        ShareResultStatus.unavailable => const CsvExportResult.unavailable(),
+      };
     } catch (_) {
       if (!current()) return const CsvExportResult.stale();
       return const CsvExportResult.failure(
@@ -116,10 +138,159 @@ abstract final class CsvExporter {
       );
     }
 
-    // A07: UTF-8 BOM agar Excel Windows membuka dengan encoding benar.
+    // A07/A1-07: UTF-8 BOM agar Excel Windows membuka dengan encoding benar.
     // Gunakan utf8.encode, bukan codeUnits yang memberi UTF-16 code units.
     const bom = [0xEF, 0xBB, 0xBF];
     return [...bom, ...utf8.encode(buf.toString())];
+  }
+
+  // ── Strict UTF-8 decode + parser CSV independen (A1-07) ────────────────
+
+  /// BOM UTF-8 (EF BB BF) yang ditulis di awal output [encode].
+  static const List<int> utf8Bom = <int>[0xEF, 0xBB, 0xBF];
+
+  /// Separator record yang ditulis serializer: LF.
+  static const String recordSeparator = '\n';
+
+  /// UTF-8 decode KETAT.
+  ///
+  /// - `allowMalformed: false`: byte malformed / sequence terpotong melempar
+  ///   [FormatException]; tidak ada karakter pengganti (U+FFFD).
+  /// - Menghapus satu BOM UTF-8 di awal bila ada.
+  /// - TIDAK melakukan normalisasi newline; pakai [parseCsv] untuk itu.
+  ///
+  /// Encoding output [encode] adalah UTF-8 + BOM (`utf8.encode`, bukan
+  /// `codeUnits`); round-trip `decodeStrict(encode(...))` menghasilkan teks
+  /// yang sama seperti yang diserialisasi sebelum BOM.
+  static String decodeStrict(List<int> bytes) {
+    var offset = 0;
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xEF &&
+        bytes[1] == 0xBB &&
+        bytes[2] == 0xBF) {
+      offset = 3;
+    }
+    final body = offset == 0 ? bytes : bytes.sublist(offset);
+    return utf8.decode(body, allowMalformed: false);
+  }
+
+  /// Parser CSV RFC-4180-style, INDEPENDEN dari serializer [encode].
+  ///
+  /// Menghasilkan daftar record; tiap record daftar kolom string.
+  /// - Field boleh dikutip `"..."`; kutip di dalam field kutipan di-escape
+  ///   menjadi `""`.
+  /// - Koma dan newline di dalam field kutipan diperlakukan sebagai data,
+  ///   bukan pemisah.
+  /// - Separator record `\n`, `\r\n`, `\r` diterima; separator di akhir tidak
+  ///   menambah record kosong.
+  /// - Newline di dalam field kutipan dinormalisasi: `\r\n` -> `\n`, `\r` ->
+  ///   `\n`.
+  /// - Satu BOM UTF-8 di awal input dilepas.
+  /// - Field tidak dikutip dibaca apa adanya; kolom kosong -> `''`.
+  ///
+  /// Melempar [FormatException] bila kutipan tidak ditutup atau ada karakter
+  /// tak terduga setelah kutipan penutup. Tidak pernah menambah record
+  /// tersembunyi dari teks.
+  static List<List<String>> parseCsv(String input) {
+    var text = input;
+    if (text.startsWith('\uFEFF')) text = text.substring(1);
+    final n = text.length;
+    if (n == 0) return const <List<String>>[];
+
+    final records = <List<String>>[];
+    var record = <String>[];
+    final field = StringBuffer();
+    var inQuotes = false;
+    var atFieldStart = true; // belum ada konten/kutip di kolom ini
+    var afterClosingQuote = false; // hanya pemisah yang boleh mengikuti
+
+    void finishField() {
+      record.add(field.toString());
+      field.clear();
+      atFieldStart = true;
+      afterClosingQuote = false;
+    }
+
+    void finishRecord() {
+      finishField();
+      records.add(record);
+      record = <String>[];
+    }
+
+    var i = 0;
+    while (i < n) {
+      final ch = text[i];
+      if (inQuotes) {
+        if (ch == '"') {
+          if (i + 1 < n && text[i + 1] == '"') {
+            field.write('"');
+            i += 2;
+            continue;
+          }
+          inQuotes = false;
+          afterClosingQuote = true;
+          i++;
+          continue;
+        }
+        if (ch == '\r') {
+          if (i + 1 < n && text[i + 1] == '\n') i++;
+          field.write('\n');
+          i++;
+          continue;
+        }
+        field.write(ch);
+        i++;
+        continue;
+      }
+
+      if (afterClosingQuote) {
+        if (ch == ',') {
+          finishField();
+          i++;
+          continue;
+        }
+        if (ch == '\n' || ch == '\r') {
+          if (ch == '\r' && i + 1 < n && text[i + 1] == '\n') i++;
+          finishRecord();
+          i++;
+          continue;
+        }
+        throw const FormatException(
+          'CSV: karakter tak terduga setelah kutipan penutup.',
+        );
+      }
+
+      if (ch == '"' && atFieldStart) {
+        inQuotes = true;
+        atFieldStart = false; // field kutipan kosong tetap kolom
+        i++;
+        continue;
+      }
+      if (ch == ',') {
+        finishField();
+        i++;
+        continue;
+      }
+      if (ch == '\n' || ch == '\r') {
+        if (ch == '\r' && i + 1 < n && text[i + 1] == '\n') i++;
+        finishRecord();
+        i++;
+        continue;
+      }
+      field.write(ch);
+      atFieldStart = false;
+      i++;
+    }
+
+    if (inQuotes) {
+      throw const FormatException('CSV: kutipan tidak ditutup.');
+    }
+    // `atFieldStart` false berarti ada kolom berjalan; record non-kosong
+    // berarti ada koma trailing -> kolom kosong terakhir.
+    if (!atFieldStart || record.isNotEmpty || field.isNotEmpty) {
+      finishRecord();
+    }
+    return records;
   }
 
   /// Format tanggal ISO 8601 (YYYY-MM-DD).
@@ -150,7 +321,7 @@ abstract final class CsvExporter {
 
 // ── Result type ───────────────────────────────────────────────────────────
 
-enum _CsvExportStatus { success, empty, cancelled, stale, failure }
+enum _CsvExportStatus { success, empty, cancelled, stale, failure, unavailable }
 
 class CsvExportResult {
   final _CsvExportStatus _status;
@@ -165,9 +336,16 @@ class CsvExportResult {
   const CsvExportResult.failure(String message)
     : this._(_CsvExportStatus.failure, errorMessage: message);
 
+  /// Share diluncurkan tetapi platform tidak melaporkan apakah pengguna
+  /// memilih tujuan. Konten sudah diserahkan ke OS — tidak dapat dicabut.
+  const CsvExportResult.unavailable() : this._(_CsvExportStatus.unavailable);
+
   bool get isSuccess => _status == _CsvExportStatus.success;
   bool get isEmpty => _status == _CsvExportStatus.empty;
   bool get isCancelled => _status == _CsvExportStatus.cancelled;
   bool get isStale => _status == _CsvExportStatus.stale;
   bool get isFailure => _status == _CsvExportStatus.failure;
+
+  /// True bila share diluncurkan namun konfirmasi aksi pengguna tidak tersedia.
+  bool get isUnavailable => _status == _CsvExportStatus.unavailable;
 }

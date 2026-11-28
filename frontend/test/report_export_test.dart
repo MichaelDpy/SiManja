@@ -159,4 +159,80 @@ void main() {
     expect(text, contains('# Pencarian: needle =1+1'));
     expect(text, isNot(contains('\n=1+1')));
   });
+
+  // ── A1-08: share result contract ─────────────────────────────────────
+
+  test('dismissed share sheet returns cancelled, not success', () async {
+    // Platform melaporkan user menutup sheet tanpa memilih tujuan.
+    // share_plus v10: empty string '' adalah penanda dismissed di MethodChannelShare.
+    messenger.setMockMethodCallHandler(sharing, (call) async {
+      shares.add(call);
+      return ''; // empty string → ShareResultStatus.dismissed
+    });
+    final result = await CsvExporter.export(
+      transactions: reportFixture(),
+      periodLabel: 'Nov 2026',
+    );
+    expect(
+      result.isCancelled,
+      isTrue,
+      reason: 'dismissed share sheet must not be reported as success',
+    );
+    expect(result.isSuccess, isFalse);
+    expect(shares, hasLength(1));
+  });
+
+  test(
+    'unavailable share result is not claimed as success or failure',
+    () async {
+      // Platform tidak mendukung konfirmasi aksi — raw value khusus.
+      messenger.setMockMethodCallHandler(sharing, (call) async {
+        shares.add(call);
+        return 'dev.fluttercommunity.plus/share/unavailable';
+      });
+      final result = await CsvExporter.export(
+        transactions: reportFixture(),
+        periodLabel: 'Nov 2026',
+      );
+      expect(
+        result.isUnavailable,
+        isTrue,
+        reason: 'unavailable must map to its own variant, not success',
+      );
+      expect(
+        result.isSuccess,
+        isFalse,
+        reason: 'must not claim user confirmed receipt',
+      );
+      expect(
+        result.isFailure,
+        isFalse,
+        reason: 'unavailable is not a technical failure',
+      );
+      expect(shares, hasLength(1));
+    },
+  );
+
+  test(
+    'success share result is not confused with unavailable or cancelled',
+    () async {
+      // Platform melaporkan user memilih tujuan — raw berisi identifier target.
+      messenger.setMockMethodCallHandler(sharing, (call) async {
+        shares.add(call);
+        return 'com.example.target'; // non-empty, non-special raw → success
+      });
+      final result = await CsvExporter.export(
+        transactions: reportFixture(),
+        periodLabel: 'Nov 2026',
+      );
+      expect(
+        result.isSuccess,
+        isTrue,
+        reason: 'explicit target selection must map to success',
+      );
+      expect(result.isCancelled, isFalse);
+      expect(result.isUnavailable, isFalse);
+      expect(shares, hasLength(1));
+    },
+  );
 }

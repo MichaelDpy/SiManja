@@ -243,7 +243,7 @@ class _HeadlineSection extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Text(
-          'Pantau pengeluaran, aset, dan tren keuangan dalam satu aplikasi yang bersih dan mudah digunakan.',
+          'Pantau pengeluaran, tabungan, dan tren keuangan dalam satu aplikasi yang bersih dan mudah digunakan.',
           style: tt.bodyMedium?.copyWith(height: 1.6),
         ),
         const SizedBox(height: 16),
@@ -251,7 +251,7 @@ class _HeadlineSection extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _FeaturePill(label: '📊 Grafik Aset'),
+            _FeaturePill(label: '📊 Visualisasi'),
             _FeaturePill(label: '💳 Transaksi'),
             _FeaturePill(label: '📈 Analitik'),
             _FeaturePill(label: '🔒 Aman'),

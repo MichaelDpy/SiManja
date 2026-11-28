@@ -94,6 +94,14 @@ double parseRupiah(String raw) {
 }
 
 // ── TextInputFormatter: hanya izinkan digit + titik ──────────────────────
+//
+// Formatter MENOLAK update (kembalikan oldValue) bila ada karakter di luar
+// digit dan titik. Alasan: strip diam-diam mengubah makna angka — contoh,
+// paste "100,50" tanpa koma menjadi "10050" (sepuluh ribu, bukan seratus).
+// Satu-satunya pengecualian adalah teks kosong (izinkan hapus semua).
+//
+// Untuk pengujian unit, gunakan [RupiahInputFormatter] yang diekspor
+// dengan @visibleForTesting di bawah.
 
 class _RupiahInputFormatter extends TextInputFormatter {
   @override
@@ -103,17 +111,16 @@ class _RupiahInputFormatter extends TextInputFormatter {
   ) {
     // Izinkan hapus seluruh teks
     if (newValue.text.isEmpty) return newValue;
-    // Hanya digit dan titik
-    final filtered = newValue.text.replaceAll(RegExp(r'[^\d.]'), '');
-    if (filtered != newValue.text) {
-      return newValue.copyWith(
-        text: filtered,
-        selection: TextSelection.collapsed(offset: filtered.length),
-      );
-    }
+    // Tolak (bukan strip) jika ada karakter di luar digit dan titik.
+    // Ini melindungi makna angka saat paste dari clipboard.
+    if (!_kAllowedRupiah.hasMatch(newValue.text)) return oldValue;
     return newValue;
   }
 }
+
+/// Pola karakter yang diizinkan pada field nominal rupiah.
+/// Hanya digit dan titik; koma, tanda negatif, dan lainnya ditolak.
+final _kAllowedRupiah = RegExp(r'^[\d.]*$');
 
 // ── Kategori (alias CategoryMeta agar ringkas) ────────────────────────────
 
@@ -177,6 +184,13 @@ class _TransactionPageState extends State<TransactionPage>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // tap luar (barrier) → Navigator.maybePop → PopScope di sheet.
+      isDismissible: true,
+      // A1-09: swipe SDK (drag-to-close) memanggil Navigator.pop imperatif
+      // yang MELEWATI PopScope & bisa membuang draft tanpa keputusan.
+      // Drag SDK dimatikan; swipe ditangani di _TransactionFormSheet lewat
+      // _requestClose() dengan aturan clean/dirty/pending yang sama.
+      enableDrag: false,
       builder: (_) => _TransactionFormSheet(existing: existing),
     );
   }
@@ -291,16 +305,12 @@ class _TransactionPageState extends State<TransactionPage>
           // ── Ringkasan Akun (data contoh) ──────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: SectionHeader(
-                    title: 'Ringkasan Akun',
-                    actionLabel: 'Kelola',
-                    onAction: () {},
-                  ),
-                ),
-              ],
+            child: Text(
+              'Ringkasan Akun',
+              style: GoogleFonts.lato(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           // Label data contoh — sesuai kontrak B2
@@ -640,7 +650,7 @@ class _TxListState extends State<_TxList> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // A12: target 48x48 minimum, label Indonesia
+                          // A1-13: target 48×48 minimum — padding diperbesar 8→16
                           Semantics(
                             label: 'Edit transaksi ${tx.description}',
                             button: true,
@@ -648,7 +658,7 @@ class _TxListState extends State<_TxList> {
                               onTap: () => widget.onEdit(tx),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
-                                padding: const EdgeInsets.all(8),
+                                padding: const EdgeInsets.all(16),
                                 child: Icon(
                                   Icons.edit_outlined,
                                   color: AppColors.teal,
@@ -658,7 +668,7 @@ class _TxListState extends State<_TxList> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          // A12: target 48x48 minimum, label Indonesia
+                          // A1-13: target 48×48 minimum — padding diperbesar 8→16
                           Semantics(
                             label: 'Hapus transaksi ${tx.description}',
                             button: true,
@@ -668,7 +678,7 @@ class _TxListState extends State<_TxList> {
                                   : () => _handleDelete(tx),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
-                                padding: const EdgeInsets.all(8),
+                                padding: const EdgeInsets.all(16),
                                 child: isDeleting
                                     ? const SizedBox(
                                         width: 14,
@@ -713,6 +723,19 @@ class _TxListState extends State<_TxList> {
 
 // ── Form Sheet ────────────────────────────────────────────────────────────
 
+/// Kecepatan swipe-ke-bawah minimum (px/s) untuk menutup sheet.
+/// Dipakai handler sendiri karena drag SDK dinonaktifkan (`enableDrag:false`)
+/// agar swipe tidak melewati guard clean/dirty/pending.
+const double _kSheetSwipeDismissVelocity = 250;
+
+/// Keadaan form transaksi untuk keputusan dismissal (A1-09).
+///
+/// - [clean]: tidak ada perubahan tersimpan-lokal → boleh tutup tanpa tanya.
+/// - [dirty]: ada perubahan yang belum disimpan → minta keputusan user.
+/// - [pending]: sedang menyimpan → dismissal diblokir, tidak ada write ganda,
+///   tidak menjanjikan pembatalan RPC.
+enum TransactionFormDismissState { clean, dirty, pending }
+
 class _TransactionFormSheet extends StatefulWidget {
   final TransactionModel? existing;
 
@@ -729,6 +752,17 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
   late DateTime _selectedDate;
   CategoryMeta? _selectedCategory;
 
+  /// Kategori asal transaksi lama (dari `existing`), dipisah dari pilihan
+  /// baru [_selectedCategory]. null bila bukan mode edit.
+  String? _originalCategory;
+
+  /// Jenis asal transaksi lama (`existing.isIncome`), dipisah dari pilihan
+  /// baru. Tidak pernah diturunkan ulang dari kategori. null bila bukan edit.
+  bool? _originalIsIncome;
+
+  /// true setelah pengguna secara eksplisit memilih kategori di dropdown.
+  bool _categoryChanged = false;
+
   // Anti double-submit
   bool _saving = false;
   String? _saveError;
@@ -736,20 +770,49 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
   bool get _isEdit => widget.existing != null;
 
-  // A14: tracking apakah form sudah diubah (dirty)
+  // A14 / A1-09: tracking apakah form sudah diubah (dirty)
   bool _isDirty = false;
 
+  // ── Snapshot baseline (nilai awal form) untuk perhitungan dirty ─────────
+  // Tersimpan saat initState agar perbandingan tidak bergantung pada mutasi
+  // state dan agar transaksi baru (existing == null) punya baseline eksplisit.
+  late final String _initialDescription;
+  late final String _initialAmount;
+  late final DateTime _initialDate;
+
   /// Periksa apakah form berbeda dari nilai awal.
+  ///
+  /// A1-09: transaksi baru yang HANYA kategori atau tanggal berubah tetap
+  /// dihitung dirty (selain keterangan/jumlah yang sudah dilacak).
   bool _checkDirty() {
-    final ex = widget.existing;
-    if (ex == null) {
-      return _descCtrl.text.trim().isNotEmpty ||
-          _amountCtrl.text.trim().isNotEmpty;
-    }
-    return _descCtrl.text.trim() != ex.description ||
-        _amountCtrl.text.trim() != ex.amount.toStringAsFixed(0) ||
-        !CalendarDate.same(_selectedDate, ex.date) ||
-        (_selectedCategory != null && _selectedCategory!.name != ex.category);
+    // Keterangan: bandingkan teks tersisa-trim terhadap baseline.
+    if (_descCtrl.text.trim() != _initialDescription) return true;
+    // Jumlah: bandingkan teks mentah tersisa-trim (format semantik dinilai
+    // saat simpan; perubahan format pun draft yang berubah → dirty).
+    if (_amountCtrl.text.trim() != _initialAmount) return true;
+    // Tanggal kalender: bandingkan komponen kalender, bukan instant (R-DATE).
+    final baselineDate = _isEdit ? widget.existing!.date : _initialDate;
+    if (!CalendarDate.same(_selectedDate, baselineDate)) return true;
+    // Kategori: hanya perubahan efektif terhadap kategori asal yang dirty.
+    return _categoryDirty;
+  }
+
+  /// true bila kategori efektif berbeda dari kategori asal (baseline).
+  ///
+  /// Pemilihan ulang kategori yang sama tidak dihitung dirty; kategori asal
+  /// tak dikenal tetap clean selama pengguna tidak memilih kategori baru.
+  bool get _categoryDirty {
+    if (!_categoryChanged) return false;
+    final selected = _selectedCategory?.name;
+    if (_isEdit) return selected != _originalCategory;
+    return selected != null; // transaksi baru: null → pilihan apa pun = dirty
+  }
+
+  /// Keadaan form untuk keputusan dismissal (A1-09): clean / dirty / pending.
+  TransactionFormDismissState get _dismissState {
+    if (_saving) return TransactionFormDismissState.pending;
+    if (_isDirty) return TransactionFormDismissState.dirty;
+    return TransactionFormDismissState.clean;
   }
 
   @override
@@ -761,7 +824,14 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       text: ex != null ? ex.amount.toStringAsFixed(0) : '',
     );
     _selectedDate = ex?.date ?? DateTime.now();
+    // Snapshot baseline SETELAH controller diisi & tanggal awal ditentukan.
+    _initialDescription = (ex?.description ?? '').trim();
+    _initialAmount = (ex != null ? ex.amount.toStringAsFixed(0) : '').trim();
+    _initialDate = _selectedDate;
     if (ex != null) {
+      // A02: kategori & jenis asal disimpan terpisah dari pilihan baru.
+      _originalCategory = ex.category;
+      _originalIsIncome = ex.isIncome;
       final match = CategoryMeta.knownCategories
           .where((c) => c.name == ex.category)
           .firstOrNull;
@@ -773,20 +843,59 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     _amountCtrl.addListener(_onFieldChanged);
   }
 
-  void _onFieldChanged() {
+  void _onFieldChanged() => _updateDirty();
+
+  void _updateDirty() {
     final dirty = _checkDirty();
     if (dirty != _isDirty) setState(() => _isDirty = dirty);
   }
 
-  // A14: tampilkan konfirmasi buang perubahan — dipanggil synchronous
+  // ── Dismissal (A1-09) ───────────────────────────────────────────────────
+
+  /// Titik masuk tunggal untuk menutup form: Back, close, tap luar, swipe.
+  ///
+  /// - pending (`_saving`): tidak menutup; pesan eksplisit, TIDAK menjanjikan
+  ///   pembatalan RPC; permintaan yang sedang berjalan tidak digandakan.
+  /// - dirty: minta keputusan user (`_confirmDiscard`); draft tidak hilang
+  ///   tanpa keputusan.
+  /// - clean: tutup tanpa konfirmasi.
+  void _requestClose() {
+    if (!mounted) return;
+    switch (_dismissState) {
+      case TransactionFormDismissState.pending:
+        _showPendingSnack();
+      case TransactionFormDismissState.dirty:
+        _confirmDiscard();
+      case TransactionFormDismissState.clean:
+        Navigator.pop(context);
+    }
+  }
+
+  /// Feedback pending: bukan konfirmasi sukses, bukan klaim cancel RPC.
+  void _showPendingSnack() {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Penyimpanan masih berjalan. Tunggu hasil dari server; permintaan belum dibatalkan.',
+        ),
+      ),
+    );
+  }
+
+  // A14 / A1-09: konfirmasi buang perubahan — dipanggil synchronous
   // agar tidak melanggar use_build_context_synchronously.
   void _confirmDiscard() {
+    final revision = AppState.instance.sessionRevision;
     showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Buang perubahan?'),
         content: const Text('Perubahan yang belum disimpan akan hilang.'),
         actions: [
+          // Cancel discard: tidak ada perubahan state → input dipertahankan.
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Lanjut Edit'),
@@ -801,7 +910,12 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         ],
       ),
     ).then((shouldDiscard) {
-      if (shouldDiscard == true && mounted) Navigator.pop(context);
+      // Hanya discard yang disetujui menutup form; selain itu input tetap.
+      if (shouldDiscard != true) return;
+      if (!mounted) return;
+      // Tidak melanjutkan sesi lama bila sesi berubah saat dialog terbuka.
+      if (AppState.instance.sessionRevision != revision) return;
+      Navigator.pop(context);
     });
   }
 
@@ -899,11 +1013,51 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
 
   // ── Save ──────────────────────────────────────────────────────────────
 
+  /// true bila pengguna secara eksplisit mengganti kategori (pilihan baru)
+  /// ke kategori yang berbeda dari kategori asal.
+  bool get _explicitCategoryChange =>
+      _categoryChanged &&
+      _selectedCategory != null &&
+      _selectedCategory!.name != _originalCategory;
+
+  /// Kategori efektif saat simpan.
+  ///
+  /// - Perubahan kategori eksplisit → pakai pilihan baru.
+  /// - Edit tanpa perubahan kategori → pertahankan kategori asal apa adanya,
+  ///   termasuk kategori tak dikenal; tidak di-fallback ke pilihan pertama.
+  /// - Tambah baru → pilihan kategori (wajib).
+  String _effectiveCategory(CategoryMeta? picked) {
+    if (_explicitCategoryChange) return picked!.name;
+    final original = _originalCategory;
+    if (_isEdit && original != null) return original;
+    return picked!.name;
+  }
+
+  /// Jenis efektif saat simpan (pemasukan/pengeluaran).
+  ///
+  /// TIDAK diturunkan ulang dari kategori ketika hanya keterangan berubah.
+  /// - Perubahan kategori/jenis eksplisit → jenis mengikuti pilihan baru.
+  /// - Edit tanpa perubahan kategori → pertahankan `originalIsIncome`,
+  ///   termasuk kategori dikenal dengan jenis legacy yang tidak selaras.
+  /// - Tambah baru → jenis pilihan kategori (wajib).
+  bool _effectiveIsIncome(CategoryMeta? picked) {
+    if (_explicitCategoryChange) return picked!.isIncome;
+    final original = _originalIsIncome;
+    if (_isEdit && original != null) return original;
+    return picked!.isIncome;
+  }
+
   Future<void> _save() async {
+    // A1-09: guard double-submit SINKRON di awal — pending (`_saving`) tidak
+    // pernah memulai write kedua; sesi yang sedang pending tidak digandakan.
+    if (_saving) return;
+
     setState(() => _saveError = null);
 
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedCategory == null) {
+    // A02: mode edit tanpa perubahan kategori tetap boleh disimpan —
+    // kategori tak dikenal memakai kategori asal. Mode tambah baru wajib pilih.
+    if (_selectedCategory == null && !(_isEdit && !_categoryChanged)) {
       setState(() => _saveError = 'Pilih kategori terlebih dahulu');
       return;
     }
@@ -917,36 +1071,53 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       return;
     }
 
-    if (_saving) return; // guard double-submit
+    // A1-09 + C05/C08: snapshot sesi untuk menolak feedback sesi lama.
+    final appState = AppState.instance;
+    final revision = appState.sessionRevision;
+    final sessionUid = appState.sessionUid;
+    bool sessionActive() =>
+        appState.sessionRevision == revision &&
+        appState.sessionUid == sessionUid;
+
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _saving = true);
 
     try {
-      final cat = _selectedCategory!;
+      final cat = _selectedCategory;
       final tx =
           widget.existing?.copyWith(
-            category: cat.name,
+            category: _effectiveCategory(cat),
             description: _descCtrl.text.trim(),
             amount: amount,
-            isIncome: cat.isIncome,
+            isIncome: _effectiveIsIncome(cat),
             date: _selectedDate,
           ) ??
           TransactionModel(
-            id: _createId ??= AppState.instance.generateId(),
-            category: cat.name,
+            // A1-09: createId STABIL — dibuat sekali, dipertahankan setelah
+            // gagal/lost-ack agar retry tidak membuat write ganda.
+            id: _createId ??= appState.generateId(),
+            category: _effectiveCategory(cat),
             description: _descCtrl.text.trim(),
             amount: amount,
-            isIncome: cat.isIncome,
+            isIncome: _effectiveIsIncome(cat),
             date: _selectedDate,
           );
 
       if (_isEdit) {
-        await AppState.instance.updateTransaction(widget.existing!.id, tx);
+        await appState.updateTransaction(widget.existing!.id, tx);
       } else {
-        await AppState.instance.addTransaction(tx);
+        await appState.addTransaction(tx);
       }
 
+      // Tidak ada feedback sesi lama: widget dibuang ATAU sesi berubah
+      // (UID switch/retry) saat permintaan berjalan.
       if (!mounted) return;
+      if (!sessionActive()) {
+        // Reset pending tanpa feedback sesi lama.
+        setState(() => _saving = false);
+        return;
+      }
+
       Navigator.pop(context);
 
       ScaffoldMessenger.of(context).clearSnackBars();
@@ -954,7 +1125,10 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
         SnackBar(
           content: Text(
             _isEdit ? 'Transaksi diperbarui' : 'Transaksi ditambahkan',
-            style: GoogleFonts.lato(color: Colors.white),
+            // A1-12: gunakan onPrimary dari colorScheme untuk kontras di kedua tema
+            style: GoogleFonts.lato(
+              color: Theme.of(context).colorScheme.onPrimary,
+            ),
           ),
           backgroundColor: AppColors.teal,
           behavior: SnackBarBehavior.floating,
@@ -965,10 +1139,17 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _saveError = 'Gagal menyimpan: $e';
-      });
+      // Tidak ada write ganda & tidak ada feedback sesi lama. `_saving`
+      // dikembalikan supaya retry (draft + createId stabil) tetap mungkin;
+      // pesan error hanya ditampilkan bila sesi masih sama.
+      if (sessionActive()) {
+        setState(() {
+          _saving = false;
+          _saveError = 'Gagal menyimpan: $e';
+        });
+      } else {
+        setState(() => _saving = false);
+      }
     }
   }
 
@@ -982,22 +1163,13 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
     return SafeArea(
       bottom: false,
       child: PopScope(
-        // A14: intersep Back/swipe saat form dirty dan belum simpan
-        canPop: !_saving && !_isDirty,
+        // A1-09: hanya state clean yang boleh pop langsung. dirty → tanya
+        // discard; pending → blokir (tidak cancel RPC, tidak ada write ganda).
+        // Berlaku untuk Back, tap luar (barrier→maybePop), close, swipe.
+        canPop: _dismissState == TransactionFormDismissState.clean,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
-          if (_saving) {
-            ScaffoldMessenger.of(context).clearSnackBars();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Penyimpanan masih berjalan. Tunggu hasil dari server; permintaan belum dibatalkan.',
-                ),
-              ),
-            );
-            return;
-          }
-          _confirmDiscard();
+          _requestClose();
         },
         child: Container(
           decoration: BoxDecoration(
@@ -1017,29 +1189,59 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Handle bar
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).dividerColor,
-                        borderRadius: BorderRadius.circular(2),
+                  // Handle bar + swipe-down (A1-09).
+                  // SDK drag dimatikan (enableDrag:false karena melewati
+                  // PopScope); swipe kami route ke _requestClose() dengan
+                  // aturan clean/dirty/pending yang sama.
+                  GestureDetector(
+                    key: const Key('transaction-sheet-swipe-handle'),
+                    behavior: HitTestBehavior.opaque,
+                    onVerticalDragEnd: (details) {
+                      final velocity = details.primaryVelocity ?? 0;
+                      if (velocity > _kSheetSwipeDismissVelocity) {
+                        _requestClose();
+                      }
+                    },
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          margin: const EdgeInsets.only(
+                            bottom: 12,
+                            top: 4,
+                            right: 48, // jangan tabrakan dengan tombol tutup
+                          ),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).dividerColor,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
                       ),
                     ),
                   ),
 
-                  // Judul
+                  // Judul + tombol tutup eksplisit (close)
                   Row(
                     children: [
-                      Text(
-                        _isEdit ? 'Edit Transaksi' : 'Tambah Transaksi',
-                        style: GoogleFonts.lato(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: cs.onSurface,
+                      Expanded(
+                        child: Text(
+                          _isEdit ? 'Edit Transaksi' : 'Tambah Transaksi',
+                          style: GoogleFonts.lato(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurface,
+                          ),
                         ),
+                      ),
+                      // A1-09: close → _requestClose (clean/dirty/pending).
+                      IconButton(
+                        key: const Key('close-transaction-form'),
+                        tooltip: 'Tutup',
+                        icon: const Icon(Icons.close),
+                        // Saat pending, tidak menutup & tidak cancel RPC.
+                        onPressed: _saving ? null : _requestClose,
                       ),
                     ],
                   ),
@@ -1125,7 +1327,7 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                                     Expanded(
                                       child: Text(
                                         'Kategori "$_unknownCategory" tidak dikenal. '
-                                        'Pilih kategori baru untuk melanjutkan.',
+                                        'Kategori asal tetap disimpan jika tidak diubah.',
                                         style: GoogleFonts.lato(
                                           color: cs.onErrorContainer,
                                           fontSize: 11,
@@ -1140,7 +1342,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                           // gunakan FormField + DropdownButton untuk controlled state.
                           FormField<CategoryMeta>(
                             initialValue: _selectedCategory,
-                            validator: (v) => v == null
+                            // A02: mode edit boleh null (kategori asal
+                            // dipertahankan, termasuk kategori tak dikenal).
+                            validator: (v) => v == null && !_isEdit
                                 ? 'Pilih kategori terlebih dahulu'
                                 : null,
                             builder: (field) {
@@ -1178,6 +1382,9 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                                           if (v == null) return;
                                           setState(() {
                                             _selectedCategory = v;
+                                            // Perubahan kategori eksplisit.
+                                            _categoryChanged = true;
+                                            _unknownCategory = null;
                                             _isDirty = _checkDirty();
                                           });
                                           field.didChange(v);
@@ -1201,17 +1408,16 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                               labelText: 'Keterangan',
                               prefixIcon: Icon(Icons.notes_outlined),
                             ),
-                            // A03: batas 1000 sesuai TransactionMapper.toMap
-                            maxLength: 1000,
+                            // A1-03: batas selaras kontrak TransactionMapper.toMap —
+                            // keterangan non-empty (min. 1 karakter non-space)
+                            // & panjang ter-trim <=1000. Tidak memakai maxLength
+                            // mentah agar 1001 invalid (bukan diam-diam dipotong).
                             textCapitalization: TextCapitalization.sentences,
                             // A09: Next membawa fokus ke field berikutnya
                             textInputAction: TextInputAction.next,
                             validator: (v) {
                               if (v == null || v.trim().isEmpty) {
                                 return 'Keterangan wajib diisi';
-                              }
-                              if (v.trim().length < 2) {
-                                return 'Keterangan minimal 2 karakter';
                               }
                               if (v.trim().length > 1000) {
                                 return 'Keterangan maksimal 1000 karakter';
@@ -1230,6 +1436,10 @@ class _TransactionFormSheetState extends State<_TransactionFormSheet> {
                             inputFormatters: [_RupiahInputFormatter()],
                             // A09: Done menutup keyboard setelah field terakhir
                             textInputAction: TextInputAction.done,
+                            // A1-03: Done = submit; guard _saving memastikan
+                            // submit ganda (Done + tap) paling banyak satu
+                            // operasi; input tidak dibersihkan saat gagal.
+                            onFieldSubmitted: (_) => _save(),
                             style: GoogleFonts.lato(
                               color: cs.onSurface,
                               fontSize: 14,

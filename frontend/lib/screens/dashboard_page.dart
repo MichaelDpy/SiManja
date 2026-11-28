@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -12,6 +10,7 @@ import '../core/app_state.dart';
 import '../core/finance_summary.dart';
 import '../widgets/section_header.dart';
 import '../widgets/account_card.dart';
+import '../widgets/local_avatar.dart';
 
 /// Model periode untuk filter ringkasan arus kas di Dasbor.
 class _DashboardPeriod {
@@ -174,7 +173,6 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  int _touchedIndex = -1;
   _DashboardPeriod _selectedPeriod = const _DashboardPeriod.all();
 
   final _fmt = NumberFormat.currency(
@@ -197,16 +195,6 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _onStateChanged() {
     if (mounted) setState(() {});
-  }
-
-  static ImageProvider? _avatarImage(String? path) {
-    if (path == null || path.isEmpty) return null;
-    try {
-      final file = File(path);
-      return file.existsSync() ? FileImage(file) : null;
-    } catch (_) {
-      return null;
-    }
   }
 
   /// Membangun daftar pilihan periode dari seri transaksi 6 bulan terakhir.
@@ -528,12 +516,6 @@ class _DashboardPageState extends State<DashboardPage> {
     final netCashFlow = FinanceSummary.netCashFlow(filteredTx);
     final savingsRate = FinanceSummary.savingsRate(filteredTx);
 
-    // Perhitungan total dan persentase aset nyata dari nilai
-    final totalAssetValue = MockData.assets.fold<double>(
-      0.0,
-      (sum, a) => sum + a.value,
-    );
-
     // Transaksi terbaru dibatasi maksimal 5
     final recentTx = filteredTx.take(5).toList();
 
@@ -595,26 +577,19 @@ class _DashboardPageState extends State<DashboardPage> {
                         customBorder: const CircleBorder(),
                         child: Padding(
                           padding: const EdgeInsets.all(4),
-                          child: Builder(
-                            builder: (_) {
-                              final avatar = _avatarImage(state.photoPath);
-                              return CircleAvatar(
-                                radius: 19,
-                                backgroundColor: AppColors.teal.withValues(
-                                  alpha: 0.2,
-                                ),
-                                backgroundImage: avatar,
-                                // File foto lokal hilang → ikon fallback,
-                                // sama dengan perilaku avatar di Profil.
-                                child: avatar == null
-                                    ? const Icon(
-                                        Icons.person,
-                                        color: AppColors.teal,
-                                        size: 20,
-                                      )
-                                    : null,
-                              );
-                            },
+                          // A1-11: fallback tahan file hilang/korup/race
+                          // (exists saja tidak cukup; no errorBuilder di
+                          // CircleAvatar) via SafeLocalAvatar. Sama dengan
+                          // perilaku avatar di Profil.
+                          child: SafeLocalAvatar(
+                            imagePath: state.photoPath,
+                            radius: 19,
+                            backgroundColor: AppColors.teal.withValues(
+                              alpha: 0.2,
+                            ),
+                            fallbackIcon: Icons.person,
+                            fallbackIconColor: AppColors.teal,
+                            fallbackIconSize: 20,
                           ),
                         ),
                       ),
@@ -898,319 +873,6 @@ class _DashboardPageState extends State<DashboardPage> {
                     ],
                   ),
                 ),
-              ),
-            ),
-
-            // ── Kartu Nilai Aset Terpisah (Data Contoh) ───────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                child: Material(
-                  color: cs.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  child: InkWell(
-                    onTap: () => widget.onNavigateToTab?.call(1),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: cs.outline.withValues(alpha: 0.35),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Wrap(
-                            alignment: WrapAlignment.spaceBetween,
-                            spacing: 12,
-                            runSpacing: 8,
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.donut_large,
-                                    size: 16,
-                                    color: cs.primary,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      'Total Nilai Aset',
-                                      style: tt.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: cs.onSurfaceVariant.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'Data contoh',
-                                  style: GoogleFonts.lato(
-                                    color: cs.onSurfaceVariant,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              _fmt.format(totalAssetValue),
-                              style: tt.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Estimasi nilai dari ${MockData.accounts.length} rekening & aset contoh',
-                                  style: tt.bodySmall?.copyWith(
-                                    color: cs.onSurfaceVariant,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Row(
-                                children: [
-                                  Text(
-                                    'Detail',
-                                    style: GoogleFonts.lato(
-                                      color: cs.primary,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  Icon(
-                                    Icons.chevron_right,
-                                    size: 16,
-                                    color: cs.primary,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Diagram Donut Distribusi Aset (Data Contoh) ───────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: cs.surface,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: cs.outline.withValues(alpha: 0.35),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          Text(
-                            'Distribusi Aset',
-                            style: tt.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: cs.onSurfaceVariant.withValues(
-                                alpha: 0.12,
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'Data contoh',
-                              style: GoogleFonts.lato(
-                                color: cs.onSurfaceVariant,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            '${MockData.assets.length} Aset',
-                            style: tt.bodySmall?.copyWith(
-                              color: cs.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isNarrow = constraints.maxWidth < 320;
-
-                          final legendItems = MockData.assets.map((a) {
-                            final pct = totalAssetValue > 0
-                                ? (a.value / totalAssetValue) * 100
-                                : 0.0;
-                            return _LegendItem(asset: a, percentage: pct);
-                          }).toList();
-
-                          final chart = PieChart(
-                            PieChartData(
-                              pieTouchData: PieTouchData(
-                                touchCallback: (event, response) {
-                                  setState(() {
-                                    if (!event.isInterestedForInteractions ||
-                                        response == null ||
-                                        response.touchedSection == null) {
-                                      _touchedIndex = -1;
-                                      return;
-                                    }
-                                    _touchedIndex = response
-                                        .touchedSection!
-                                        .touchedSectionIndex;
-                                  });
-                                },
-                              ),
-                              sections: MockData.assets.asMap().entries.map((
-                                e,
-                              ) {
-                                final isTouched = e.key == _touchedIndex;
-                                final pct = totalAssetValue > 0
-                                    ? (e.value.value / totalAssetValue) * 100
-                                    : 0.0;
-                                return PieChartSectionData(
-                                  value: e.value.value,
-                                  color: e.value.color,
-                                  radius: isTouched ? 48 : 40,
-                                  title: isTouched
-                                      ? '${pct.toStringAsFixed(1)}%'
-                                      : '',
-                                  titleStyle: GoogleFonts.lato(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                );
-                              }).toList(),
-                              centerSpaceRadius: 36,
-                              sectionsSpace: 2,
-                            ),
-                          );
-
-                          if (isNarrow) {
-                            return Column(
-                              children: [
-                                SizedBox(height: 160, child: chart),
-                                const SizedBox(height: 14),
-                                Column(children: legendItems),
-                              ],
-                            );
-                          }
-
-                          return Row(
-                            children: [
-                              Expanded(
-                                flex: 5,
-                                child: SizedBox(height: 170, child: chart),
-                              ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                flex: 6,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: legendItems,
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Rekening & Akun ──────────────────────────────────────────
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SectionHeader(
-                      title: 'Rekening & Akun',
-                      actionLabel: 'Lihat Semua',
-                      onAction: () => widget.onNavigateToTab?.call(1),
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: cs.onSurfaceVariant.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            'Data contoh • belum terhubung ke transaksi',
-                            style: GoogleFonts.lato(
-                              color: cs.onSurfaceVariant,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                  child: AccountCard(account: MockData.accounts[i]),
-                ),
-                childCount: MockData.accounts.length,
               ),
             ),
 

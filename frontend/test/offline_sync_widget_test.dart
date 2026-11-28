@@ -115,4 +115,81 @@ void main() {
       expect(find.text('Transaksi ditambahkan'), findsOneWidget);
     },
   );
+
+  // ── A1-09: state pending pada dismissal + no-duplicate / no stale feedback ──
+
+  testWidgets(
+    'state pending: Back/close/tap luar/swipe diblokir; tidak cancel RPC; tidak ada write ganda',
+    (tester) async {
+      final repository = await form(tester);
+      repository.pendingWrite = Completer<void>();
+      await submit(tester);
+      await tester.pump();
+      expect(AppState.instance.pendingMutations, 1);
+      expect(tester.widget<TextField>(input('Keterangan')).enabled, isFalse);
+
+      // Back
+      await tester.binding.handlePopRoute();
+      await tester.pump();
+      // Close (dinonaktifkan saat pending)
+      final close = tester.widget<IconButton>(
+        find.byKey(const Key('close-transaction-form')),
+      );
+      expect(close.onPressed, isNull);
+      // Tap luar
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pump();
+      // Swipe-down
+      await tester.fling(
+        find.byKey(const Key('transaction-sheet-swipe-handle')),
+        const Offset(0, 300),
+        1000,
+      );
+      await tester.pump();
+
+      // Form tidak tertutup, tidak ada discard dialog, tidak ada sukses.
+      expect(input('Keterangan'), findsOneWidget);
+      expect(find.text('Buang perubahan?'), findsNothing);
+      expect(find.text('Transaksi ditambahkan'), findsNothing);
+      // Pesan pending eksplisit; TIDAK menjanjikan pembatalan RPC.
+      expect(
+        find.textContaining('permintaan belum dibatalkan'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('dibatalkan...'), findsNothing);
+      // Tidak ada write ganda; masih satu mutasi pending.
+      expect(AppState.instance.pendingMutations, 1);
+      expect(repository.committedWrites, 0);
+
+      repository.pendingWrite!.complete();
+      await tester.pumpAndSettle();
+      expect(repository.committedWrites, 1);
+      expect(find.text('Transaksi ditambahkan'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'UID switch saat pending: tidak ada write ganda atau feedback sesi lama',
+    (tester) async {
+      final repository = await form(tester);
+      repository.pendingWrite = Completer<void>();
+      await submit(tester);
+      await tester.pump();
+      expect(AppState.instance.pendingMutations, 1);
+
+      // Ganti UID saat permintaan berjalan.
+      await AppState.instance.clearSession();
+      repository.pendingWrite!.complete();
+      await tester.pumpAndSettle();
+
+      // Satu permintaan saja; tidak ada write kedua untuk sesi baru.
+      expect(repository.attemptedIds, hasLength(1));
+      // Tidak ada feedback sesi lama: bukan sukses, bukan error form.
+      expect(find.text('Transaksi ditambahkan'), findsNothing);
+      expect(find.textContaining('Gagal menyimpan'), findsNothing);
+      expect(find.text('Buang perubahan?'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
