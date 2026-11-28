@@ -654,7 +654,7 @@ class _TxListState extends State<_TxList> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // A12: target 48x48 minimum, label Indonesia
+                          // A1-13: target 48×48 minimum — padding diperbesar 8→16
                           Semantics(
                             label: 'Edit transaksi ${tx.description}',
                             button: true,
@@ -662,7 +662,7 @@ class _TxListState extends State<_TxList> {
                               onTap: () => widget.onEdit(tx),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
-                                padding: const EdgeInsets.all(8),
+                                padding: const EdgeInsets.all(16),
                                 child: Icon(
                                   Icons.edit_outlined,
                                   color: AppColors.teal,
@@ -672,7 +672,7 @@ class _TxListState extends State<_TxList> {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          // A12: target 48x48 minimum, label Indonesia
+                          // A1-13: target 48×48 minimum — padding diperbesar 8→16
                           Semantics(
                             label: 'Hapus transaksi ${tx.description}',
                             button: true,
@@ -682,7 +682,7 @@ class _TxListState extends State<_TxList> {
                                   : () => _handleDelete(tx),
                               borderRadius: BorderRadius.circular(8),
                               child: Padding(
-                                padding: const EdgeInsets.all(8),
+                                padding: const EdgeInsets.all(16),
                                 child: isDeleting
                                     ? const SizedBox(
                                         width: 14,

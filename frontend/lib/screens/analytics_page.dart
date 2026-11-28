@@ -781,8 +781,9 @@ class _PeriodStepper extends StatelessWidget {
           icon: const Icon(Icons.chevron_left, size: 20),
           onPressed: onPrev,
           tooltip: 'Periode sebelumnya',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          // A1-13: kembalikan ke default 48×48, hapus override 32×32
+          padding: const EdgeInsets.all(8),
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -807,8 +808,9 @@ class _PeriodStepper extends StatelessWidget {
           ),
           onPressed: onNext,
           tooltip: 'Periode berikutnya',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          // A1-13: kembalikan ke default 48×48, hapus override 32×32
+          padding: const EdgeInsets.all(8),
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
         ),
         const SizedBox(width: 4),
       ],

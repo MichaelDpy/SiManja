@@ -492,38 +492,48 @@ class _DataTablePageState extends State<DataTablePage> {
               ),
               if (hasActiveFilter) ...[
                 const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _resetFilters,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.teal.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: AppColors.teal.withValues(alpha: 0.3),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.filter_alt_off,
-                          color: AppColors.teal,
-                          size: 11,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Reset filter',
-                          style: GoogleFonts.lato(
-                            color: AppColors.teal,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                // A1-13: SizedBox 48 untuk memenuhi target sentuh minimum
+                SizedBox(
+                  height: 48,
+                  child: Center(
+                    child: Semantics(
+                      button: true,
+                      label: 'Reset filter',
+                      child: GestureDetector(
+                        onTap: _resetFilters,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.teal.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.teal.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.filter_alt_off,
+                                color: AppColors.teal,
+                                size: 11,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Reset filter',
+                                style: GoogleFonts.lato(
+                                  color: AppColors.teal,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -858,31 +868,38 @@ class _HeaderCell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isActive = sortCol == col;
-    return GestureDetector(
-      onTap: () => onTap(col),
-      child: SizedBox(
-        width: width,
-        child: Row(
-          children: [
-            Flexible(
-              child: Text(
-                label,
-                style: GoogleFonts.lato(
-                  color: isActive ? AppColors.teal : AppColors.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
+    final sortLabel = isActive
+        ? (asc ? 'diurutkan naik' : 'diurutkan turun')
+        : 'tidak diurutkan';
+    return Semantics(
+      button: true,
+      label: 'Urutkan berdasarkan $label, saat ini $sortLabel',
+      child: GestureDetector(
+        onTap: () => onTap(col),
+        child: SizedBox(
+          width: width,
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  style: GoogleFonts.lato(
+                    color: isActive ? AppColors.teal : AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
-            if (isActive) ...[
-              const SizedBox(width: 2),
-              Icon(
-                asc ? Icons.arrow_upward : Icons.arrow_downward,
-                size: 10,
-                color: AppColors.teal,
-              ),
+              if (isActive) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  asc ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 10,
+                  color: AppColors.teal,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

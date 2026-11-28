@@ -571,6 +571,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 label: 'Pendapatan Bulanan (Rp)',
                 icon: Icons.payments_outlined,
                 keyboardType: TextInputType.number,
+                // A1-13: Done karena field terakhir sebelum preferensi toggle
+                textInputAction: TextInputAction.done,
                 hint: 'Contoh: 5000000',
                 helperText:
                     'Rupiah bulat: 5000000 atau 5.000.000. Kosong berarti 0.',
@@ -921,6 +923,7 @@ class _AppFormField extends StatelessWidget {
   final bool readOnly;
   final String? Function(String?)? validator;
   final TextCapitalization textCapitalization;
+  final TextInputAction? textInputAction;
 
   const _AppFormField({
     super.key,
@@ -934,6 +937,7 @@ class _AppFormField extends StatelessWidget {
     this.readOnly = false,
     this.validator,
     this.textCapitalization = TextCapitalization.none,
+    this.textInputAction,
   });
 
   @override
@@ -945,6 +949,8 @@ class _AppFormField extends StatelessWidget {
       keyboardType: keyboardType,
       maxLines: maxLines,
       textCapitalization: textCapitalization,
+      // A1-13: textInputAction untuk focus traversal yang logis
+      textInputAction: textInputAction ?? TextInputAction.next,
       validator: validator,
       style: GoogleFonts.lato(fontSize: 14),
       decoration: InputDecoration(
