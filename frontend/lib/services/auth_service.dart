@@ -453,11 +453,17 @@ class AuthService implements AuthGateway {
             code: AuthErrorCodes.reauthProviderUnsupported,
           );
         }
-        final result = kIsWeb
-            ? await user.reauthenticateWithPopup(_webProvider)
-            : await user.reauthenticateWithCredential(
-                await _nativeGoogleCredential(),
-              );
+        final session = _SessionMark.of(user);
+        final UserCredential result;
+        if (kIsWeb) {
+          result = await user.reauthenticateWithPopup(_webProvider);
+        } else {
+          final credential = await _nativeGoogleCredential();
+          // UI Google bisa lama: pastikan objek pengguna belum basi
+          // (A→B / logout / masuk ulang) sebelum reauth dijalankan.
+          final current = _requireSessionUnchanged(session);
+          result = await current.reauthenticateWithCredential(credential);
+        }
         final uid = result.user?.uid ?? user.uid;
         if (uid != user.uid || _auth.currentUser?.uid != user.uid) {
           throw FirebaseAuthException(code: 'user-mismatch');
@@ -479,12 +485,19 @@ class AuthService implements AuthGateway {
   Future<void> linkGoogle(ReauthGrant grant) => _guardCancel(() async {
     _requireGoogle();
     final user = _requireGrant(grant, SensitiveOperation.linkProvider);
+    final session = _SessionMark.of(user);
+    final User target;
     if (kIsWeb) {
+      target = user;
       await user.linkWithPopup(_webProvider);
     } else {
-      await user.linkWithCredential(await _nativeGoogleCredential());
+      final credential = await _nativeGoogleCredential();
+      // Setelah UI Google, hubungkan hanya ke pemilik grant pada sesi yang
+      // sama; tidak pernah ke akun yang kebetulan masuk sekarang.
+      target = _requireSameSession(grant, session);
+      await target.linkWithCredential(credential);
     }
-    await user.reload();
+    if (_SessionMark.of(_auth.currentUser) == session) await target.reload();
   });
 
   @override
@@ -528,12 +541,20 @@ class AuthService implements AuthGateway {
   /// Pengguna saat ini, hanya bila masih sesi yang sama dengan [before] dan
   /// grant masih berlaku untuk operasinya; selain itu `user-mismatch`.
   User _requireSameSession(ReauthGrant grant, _SessionMark before) {
+    final current = _requireSessionUnchanged(before);
+    if (!grant.allows(current.uid, grant.operation)) {
+      throw FirebaseAuthException(code: AuthErrorCodes.reauthMismatch);
+    }
+    return current;
+  }
+
+  /// Pengguna saat ini bila sesinya sama dengan [before]; selain itu
+  /// `user-mismatch`. Dipanggil sebelum mutasi/reauth, bukan sesudah reauth
+  /// (reauth dapat memperbarui waktu masuk).
+  User _requireSessionUnchanged(_SessionMark before) {
     final current = _auth.currentUser;
     if (current == null || _SessionMark.of(current) != before) {
       throw FirebaseAuthException(code: 'user-mismatch');
-    }
-    if (!grant.allows(current.uid, grant.operation)) {
-      throw FirebaseAuthException(code: AuthErrorCodes.reauthMismatch);
     }
     return current;
   }

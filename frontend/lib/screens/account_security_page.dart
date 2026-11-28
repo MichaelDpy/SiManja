@@ -92,8 +92,10 @@ class _AccountSecurityPageState extends State<AccountSecurityPage> {
       await action(grant);
       final fresh = await _auth.reloadUser();
       if (!mounted) return;
-      setState(() => _user = fresh?.uid == uid ? fresh : null);
-      _snack(success);
+      final sameAccount = fresh?.uid == uid;
+      setState(() => _user = sameAccount ? fresh : null);
+      // Pesan sukses milik akun lama tidak ditampilkan ke akun lain.
+      if (sameAccount) _snack(success);
     } on FirebaseAuthException catch (error) {
       if (mounted && error.code != AuthErrorCodes.cancelled) {
         setState(() => _message = authErrorMessage(error));
