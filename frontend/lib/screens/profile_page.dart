@@ -656,6 +656,46 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ),
 
+              const SizedBox(height: 20),
+
+              // ── Akun & Keamanan (A1-18) ────────────────────────────
+              // Memakai halaman B05 yang sudah ada (/account-security) dan
+              // halaman lisensi bawaan Flutter (LicenseRegistry di main).
+              _SectionLabel(label: 'Akun & Keamanan'),
+              const SizedBox(height: 8),
+              Material(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(14),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: [
+                    ListTile(
+                      key: const Key('profile-security'),
+                      leading: const Icon(Icons.shield_outlined),
+                      title: const Text('Keamanan Akun'),
+                      subtitle: const Text(
+                        'Verifikasi email, metode masuk, ganti password',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/account-security'),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      key: const Key('profile-licenses'),
+                      leading: const Icon(Icons.description_outlined),
+                      title: const Text('Lisensi Perangkat Lunak'),
+                      subtitle: const Text('Font dan pustaka yang dipakai'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => showLicensePage(
+                        context: context,
+                        applicationName: 'SIMANJA',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               const SizedBox(height: 12),
 
               // ── Keluar ─────────────────────────────────────────────

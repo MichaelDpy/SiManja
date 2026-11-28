@@ -49,14 +49,26 @@ class PrivacyPage extends StatelessWidget {
                   title: 'Foto Profil',
                   detail:
                       'Disimpan LOKAL di perangkat ini saja. Tidak diunggah ke '
-                      'server atau Firebase Storage pada tahap ini.',
+                      'server atau Firebase Storage. Tampilan foto dikosongkan '
+                      'saat keluar atau berganti akun.',
                 ),
                 _DataItem(
                   icon: Icons.email_outlined,
                   title: 'Email & Autentikasi',
                   detail:
-                      'Email dan data autentikasi dikelola oleh Firebase Auth. '
-                      'Password tidak disimpan oleh aplikasi.',
+                      'Email, status verifikasi email, dan metode masuk '
+                      '(email/password atau Google) dikelola oleh Firebase '
+                      'Auth. Password tidak disimpan oleh aplikasi. Sesi '
+                      'masuk diingat di perangkat sampai kamu keluar.',
+                ),
+                _DataItem(
+                  icon: Icons.storage_outlined,
+                  title: 'Data di Perangkat',
+                  detail:
+                      'Penyimpanan cache Firestore di disk dinonaktifkan untuk '
+                      'sesi baru, dan data akun dibersihkan dari tampilan saat '
+                      'keluar. Ini bukan penghapusan aman: berkas sementara '
+                      'atau cache lama di perangkat tidak dijamin hilang.',
                 ),
               ],
             ),
@@ -75,15 +87,24 @@ class PrivacyPage extends StatelessWidget {
                   icon: Icons.download_outlined,
                   title: 'Ekspor Transaksi',
                   detail:
-                      'Unduh semua transaksi sebagai file CSV dari halaman Data.',
+                      'Bagikan transaksi sesuai filter aktif sebagai file CSV '
+                      'dari halaman Data. File yang sudah kamu bagikan ke '
+                      'aplikasi lain tidak dapat ditarik kembali oleh SIMANJA.',
+                ),
+                _DataItem(
+                  icon: Icons.shield_outlined,
+                  title: 'Keamanan Akun',
+                  detail:
+                      'Cek status verifikasi email, kelola metode masuk, dan '
+                      'ganti password dari Profil → Keamanan Akun.',
                 ),
                 _DataItem(
                   icon: Icons.delete_outline,
                   title: 'Hapus Akun',
                   detail:
-                      'Fitur hapus akun beserta seluruh data akan tersedia pada '
-                      'pembaruan berikutnya. Hubungi dukungan untuk permintaan '
-                      'hapus data saat ini.',
+                      'Hapus akun beserta datanya belum dapat dilakukan dari '
+                      'aplikasi. Fitur ini sedang disiapkan dan akan muncul '
+                      'di sini setelah tersedia.',
                 ),
               ],
             ),
@@ -97,22 +118,30 @@ class PrivacyPage extends StatelessWidget {
                   icon: Icons.cloud_outlined,
                   title: 'Firebase (Google)',
                   detail:
-                      'Autentikasi dan penyimpanan data menggunakan Firebase '
-                      'Auth dan Cloud Firestore. Kebijakan privasi Google '
-                      'berlaku untuk layanan ini.',
+                      'Autentikasi, penyimpanan data, dan layanan akun memakai '
+                      'Firebase Auth, Cloud Firestore, dan Cloud Functions. '
+                      'Kebijakan privasi Google berlaku untuk layanan ini.',
+                ),
+                _DataItem(
+                  icon: Icons.login,
+                  title: 'Google Sign-In',
+                  detail:
+                      'Opsional. Bila kamu masuk atau menghubungkan akun '
+                      'dengan Google, Google memberi aplikasi identitas akun '
+                      '(email dan ID akun) untuk Firebase Auth.',
                 ),
                 _DataItem(
                   icon: Icons.font_download_outlined,
-                  title: 'Google Fonts',
+                  title: 'Font Lato',
                   detail:
-                      'Font Lato diunduh dari Google Fonts saat pertama kali '
-                      'digunakan dan di-cache lokal. Tidak ada data pengguna '
-                      'yang dikirim.',
+                      'Font Lato dibundel di dalam aplikasi dan tidak diunduh '
+                      'dari internet. Lisensi SIL Open Font License dapat '
+                      'dilihat di Profil → Lisensi Perangkat Lunak.',
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            _SectionTitle('Hubungi Kami', tt),
+            _SectionTitle('Dukungan', tt),
             const SizedBox(height: 8),
             Container(
               width: double.infinity,
@@ -125,8 +154,11 @@ class PrivacyPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Tidak ada alamat dukungan yang nyata dari pemilik;
+                  // jangan menampilkan kontak dummy (A1-18).
                   Text(
-                    'Pertanyaan atau permintaan data? Hubungi tim SIMANJA.',
+                    'Kontak dukungan resmi belum tersedia.',
+                    key: const Key('privacy-contact-pending'),
                     style: tt.bodyMedium,
                   ),
                   const SizedBox(height: 12),
@@ -159,10 +191,7 @@ class PrivacyPage extends StatelessWidget {
             Text(
               'Versi informasi ini mencerminkan fitur aktual aplikasi '
               'saat ini dan akan diperbarui seiring perkembangan fitur.',
-              style: GoogleFonts.lato(
-                color: AppColors.textMuted,
-                fontSize: 10,
-              ),
+              style: GoogleFonts.lato(color: AppColors.textMuted, fontSize: 10),
               textAlign: TextAlign.center,
             ),
           ],
@@ -190,10 +219,7 @@ class _SectionTitle extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          text,
-          style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-        ),
+        Text(text, style: tt.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
       ],
     );
   }
