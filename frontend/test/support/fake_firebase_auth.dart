@@ -12,6 +12,23 @@ class FakeFirebaseAuth extends Fake implements FirebaseAuth {
 
   @override
   User? get currentUser => current;
+
+  /// Email yang dianggap terdaftar untuk sendPasswordResetEmail.
+  final registered = <String>{};
+  Object? resetFailure;
+
+  @override
+  Future<void> sendPasswordResetEmail({
+    required String email,
+    ActionCodeSettings? actionCodeSettings,
+  }) async {
+    mutations.add('reset:$email');
+    if (resetFailure != null) throw resetFailure!;
+    if (!registered.contains(email)) {
+      // Perilaku project tanpa perlindungan enumerasi (terbukti di emulator).
+      throw FirebaseAuthException(code: 'user-not-found');
+    }
+  }
 }
 
 class FakeUser extends Fake implements User {

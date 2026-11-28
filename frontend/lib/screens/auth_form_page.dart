@@ -168,6 +168,8 @@ class _AuthFormPageState extends State<AuthFormPage> {
                         enabled: !_busy,
                         controller: _confirm,
                         obscureText: _obscure,
+                        // Password manager mengisi kedua kolom password baru.
+                        autofillHints: const [AutofillHints.newPassword],
                         textInputAction: TextInputAction.done,
                         onFieldSubmitted: (_) => _submit(),
                         validator: (v) => v != _password.text
